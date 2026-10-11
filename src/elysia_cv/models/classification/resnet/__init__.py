@@ -1,0 +1,1 @@
+"""ResNet model plugin — placeholder (to be implemented in P4)."""

@@ -1,0 +1,106 @@
+_base_: "../_base_/default_runtime.yaml"
+
+run:
+  name: cassava_mlp_baseline
+  stage: train
+  seed: 42
+  output_dir: ./work_dirs/cassava_mlp
+
+# MLP baseline: flatten → FC → FC → FC
+model:
+  type: cassava_mlp
+  pretrained_path: null
+  backbone:
+    type: MLP
+    input_size: [64, 64]
+    in_channels: 3
+    hidden_dims: [1024, 512]
+    dropout: 0.3
+  head:
+    type: LinearClsHead
+    num_classes: 5
+    in_channels: 512
+    dropout: 0.2
+
+data:
+  train:
+    dataset_name: cassava
+    dataset_root: /data/hdd3/chuqi/data/cassava
+    split: train
+    loader:
+      batch_size: 32
+      num_workers: 4
+      prefetch_factor: 2
+      pin_memory: true
+      persistent_workers: true
+      drop_last: false
+    transforms:
+      - type: Resize
+        size: 64
+        keep_ratio: true
+      - type: RandomFlip
+        prob: 0.5
+      - type: Normalize
+        mean: [0.485, 0.456, 0.406]
+        std: [0.229, 0.224, 0.225]
+      - type: PackInputs
+  val:
+    dataset_name: cassava
+    dataset_root: /data/hdd3/chuqi/data/cassava
+    split: val
+    loader:
+      batch_size: 128
+      num_workers: 2
+      prefetch_factor: 2
+      pin_memory: true
+      persistent_workers: false
+      drop_last: false
+    transforms:
+      - type: Resize
+        size: 64
+        keep_ratio: true
+      - type: Normalize
+        mean: [0.485, 0.456, 0.406]
+        std: [0.229, 0.224, 0.225]
+      - type: PackInputs
+
+engine:
+  strategy: ddp
+  distributed:
+    proc_per_node: 1
+    ddp_find_unused_parameters: true
+    ddp_broadcast_buffers: false
+    ddp_bucket_cap_mb: 64
+    ddp_gradient_as_bucket_view: true
+  precision:
+    mixed_precision: false
+    dtype: float32
+  compile:
+    enabled: false
+  optimization:
+    gradient_accumulation_steps: 1
+    grad_clip_norm: null
+    optimizer_zero_grad_set_to_none: true
+
+optim:
+  type: AdamW
+  params:
+    lr: 0.001
+    weight_decay: 0.0001
+
+schedule:
+  type: CosineAnnealing
+  steps: 16050
+  base_lr: 0.001
+  min_lr: 0.00001
+  warmup_steps: 300
+
+tracking:
+  log_freq: 50
+
+eval:
+  eval_freq: 1000
+  metrics:
+    - Accuracy
+  save_best: Accuracy
+  save_final: true

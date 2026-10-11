@@ -1,0 +1,83 @@
+[build-system]
+requires = ["setuptools>=71.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "elysia-cv"
+version = "0.1.0"
+description = "Unified training framework for computer vision research — classification, detection, segmentation, action recognition."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+    { name = "ElysiaCV Team" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "draccus>=0.10",
+    "numpy",
+    "Pillow",
+    "PyYAML>=6",
+    "tomli; python_version < '3.11'",
+    "torch>=2.0",
+    "torchvision",
+    "tqdm",
+    "typing_extensions>=4.8",
+]
+
+[project.optional-dependencies]
+train = [
+    "accelerate",
+    "einops",
+    "huggingface_hub",
+    "jsonlines",
+    "safetensors",
+    "timm>=0.9",
+    "transformers",
+]
+logging = [
+    "wandb",
+]
+dev = [
+    "black>=24.2.0",
+    "ipython",
+    "pre-commit",
+    "pytest",
+    "pytest-cov",
+    "ruff>=0.2.2",
+]
+
+[project.urls]
+homepage = "https://github.com/invoidstar/ElysiaCV"
+repository = "https://github.com/invoidstar/ElysiaCV"
+
+[project.scripts]
+elysia = "elysia_cv.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 120
+target-version = ["py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["A", "B", "E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["E402", "F401"]

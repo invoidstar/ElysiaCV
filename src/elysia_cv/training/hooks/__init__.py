@@ -1,0 +1,1 @@
+"""Training hooks — registered via ``elysia_cv.core.registry.HOOKS``."""

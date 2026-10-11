@@ -1,0 +1,120 @@
+_base_: "../_base_/default_runtime.yaml"
+
+run:
+  name: cassava_vit_b16
+  stage: train
+  seed: 42
+  output_dir: ./work_dirs/cassava_vit_b16
+
+# ViT-Base/16 — 86M params, patch=16
+model:
+  type: cassava_vit_b16
+  pretrained_path: null
+  backbone:
+    type: ViT
+    variant: vit_b_16
+    image_size: 448
+    pretrained: false
+    frozen_stages: 0
+    dropout: 0.1
+  head:
+    type: LinearClsHead
+    num_classes: 5
+    in_channels: 768
+    dropout: 0.1
+
+data:
+  train:
+    dataset_name: cassava
+    dataset_root: /data/hdd3/chuqi/data/cassava
+    split: train
+    loader:
+      batch_size: 16
+      num_workers: 4
+      prefetch_factor: 2
+      pin_memory: true
+      persistent_workers: true
+      drop_last: false
+    transforms:
+      - type: Resize
+        size: 512
+        keep_ratio: true
+      - type: RandomResizedCrop
+        size: 448
+        scale: [0.8, 1.0]
+      - type: RandomFlip
+        prob: 0.5
+      - type: ColorJitter
+        brightness: 0.2
+        contrast: 0.2
+        saturation: 0.2
+        hue: 0.1
+      - type: Normalize
+        mean: [0.485, 0.456, 0.406]
+        std: [0.229, 0.224, 0.225]
+      - type: PackInputs
+  val:
+    dataset_name: cassava
+    dataset_root: /data/hdd3/chuqi/data/cassava
+    split: val
+    loader:
+      batch_size: 32
+      num_workers: 2
+      prefetch_factor: 2
+      pin_memory: true
+      persistent_workers: false
+      drop_last: false
+    transforms:
+      - type: Resize
+        size: 448
+        keep_ratio: true
+      - type: CenterCrop
+        size: 448
+      - type: Normalize
+        mean: [0.485, 0.456, 0.406]
+        std: [0.229, 0.224, 0.225]
+      - type: PackInputs
+
+engine:
+  strategy: ddp
+  distributed:
+    proc_per_node: 1
+    ddp_find_unused_parameters: true
+    ddp_broadcast_buffers: false
+    ddp_bucket_cap_mb: 64
+    ddp_gradient_as_bucket_view: true
+  precision:
+    mixed_precision: true
+    dtype: bfloat16
+  compile:
+    enabled: false
+  optimization:
+    gradient_accumulation_steps: 2
+    grad_clip_norm: 1.0
+    optimizer_zero_grad_set_to_none: true
+
+# ViT uses AdamW with lower learning rate
+optim:
+  type: AdamW
+  params:
+    lr: 0.0003
+    weight_decay: 0.05
+    betas: [0.9, 0.999]
+
+schedule:
+  type: CosineAnnealing
+  steps: 16050
+  base_lr: 0.0003
+  min_lr: 0.000001
+  warmup_steps: 1000
+
+tracking:
+  log_freq: 50
+
+eval:
+  eval_freq: 1000
+  metrics:
+    - Accuracy
+    - Top5Accuracy
+  save_best: Accuracy
+  save_final: true

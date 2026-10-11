@@ -1,0 +1,124 @@
+_base_: "../_base_/default_runtime.yaml"
+
+run:
+  name: resnet50_imagenet
+  stage: train
+  seed: 42
+  output_dir: ./work_dirs/resnet50_imagenet
+  test_run: false
+
+model:
+  type: resnet50
+  pretrained_path: null
+  backbone:
+    type: ResNet
+    depth: 50
+    num_stages: 4
+    out_indices: [4]
+    frozen_stages: 1
+  neck:
+    type: Identity
+  head:
+    type: ClsHead
+    num_classes: 1000
+    in_channels: 2048
+
+data:
+  train:
+    dataset_name: ImageNet
+    dataset_root: ${IMAGENET_ROOT:-/data/imagenet}
+    split: train
+    loader:
+      batch_size: 256
+      num_workers: 8
+      prefetch_factor: 2
+      pin_memory: true
+      persistent_workers: true
+      drop_last: false
+    transforms:
+      - type: LoadImageFromFile
+      - type: RandomResizedCrop
+        size: 224
+        scale: [0.08, 1.0]
+      - type: RandomFlip
+        prob: 0.5
+      - type: Normalize
+        mean: [123.675, 116.28, 103.53]
+        std: [58.395, 57.12, 57.375]
+      - type: PackInputs
+  val:
+    dataset_name: ImageNet
+    dataset_root: ${IMAGENET_ROOT:-/data/imagenet}
+    split: val
+    loader:
+      batch_size: 256
+      num_workers: 8
+      prefetch_factor: 2
+      pin_memory: true
+      persistent_workers: false
+      drop_last: false
+    transforms:
+      - type: LoadImageFromFile
+      - type: Resize
+        size: 256
+      - type: CenterCrop
+        size: 224
+      - type: Normalize
+        mean: [123.675, 116.28, 103.53]
+        std: [58.395, 57.12, 57.375]
+      - type: PackInputs
+
+engine:
+  backend: native
+  strategy: ddp
+  distributed:
+    proc_per_node: 8
+    ddp_find_unused_parameters: true
+    ddp_broadcast_buffers: false
+    ddp_bucket_cap_mb: 64
+    ddp_gradient_as_bucket_view: true
+    ddp_static_graph: false
+  precision:
+    mixed_precision: true
+    dtype: bfloat16
+    cudnn_benchmark: true
+    allow_tf32: true
+  compile:
+    enabled: false
+    mode: reduce-overhead
+  optimization:
+    gradient_accumulation_steps: 1
+    grad_clip_norm: null
+    optimizer_zero_grad_set_to_none: true
+
+optim:
+  type: SGD
+  params:
+    lr: 0.1
+    momentum: 0.9
+    weight_decay: 0.0001
+
+schedule:
+  type: MultiStepLR
+  steps: 100000
+  base_lr: 0.1
+  min_lr: 0.0001
+  warmup_steps: 2500
+  params:
+    milestones: [30000, 60000, 90000]
+    gamma: 0.1
+
+tracking:
+  log_freq: 50
+  wandb:
+    enabled: false
+    project: ElysiaCV
+    mode: online
+
+eval:
+  eval_freq: 5000
+  metrics:
+    - Accuracy
+    - Top5Accuracy
+  save_best: Accuracy
+  save_final: true

@@ -1,0 +1,1 @@
+"""Utils package — lightweight helpers with zero heavy dependencies."""
