@@ -1,77 +1,79 @@
-# AGENTS.md — projects/cassava/
+# projects/cassava — 木薯叶片病害细粒度分类
 
-> Cassava 叶片病害细粒度分类实验项目。
+> **项目侧文档**。本目录描述 Cassava 分类实验，实际代码分布在工程侧的多个位置。
+> 类似于 ElysiaRobot 与 mstvla4resta 的关系：框架代码在 `src/elysia_cv/`，项目实验配置、脚本、分析工具聚合在此处记录。
 
 ---
 
-## 目录
+## 项目概况
+
+- **任务**：5 类木薯叶片病害细粒度分类
+- **数据集**：17,117 train / 4,280 val，严重类别不平衡（CMD = 61.5%）
+- **损失函数**：FocalLoss (α=0.25, γ=2.0)
+- **框架**：ElysiaCV
+
+---
+
+## 项目文件分布
 
 ```
-projects/cassava/
-├── AGENTS.md                  ← 当前文件
-├── scripts/
-│   ├── run.sh                 ← 单机单卡顺序实验
-│   └── ddp_run.sh             ← 单机多卡 (torchrun) 单模型
-├── tools/
-│   └── analyze.py             ← 训练后分析（混淆矩阵 + GradCAM）
-└── configs -> ../../configs/  ← 逻辑符号链接（配置统一在根 configs/ 管理）
+工程侧 (src/elysia_cv/)                    项目侧 (关联到此项目)
+──────────────────────────────────────    ─────────────────────────────────
+models/classification/cassava/            configs/
+├── plugin.py    ← 模型注册 (7 个 spec)      ├── datasets/cassava.yaml
+└── runtime.py   ← CassavaModel + loss        ├── models/mlp.yaml .. vit_l16.yaml
+                                               └── experiments/cassava_*.yaml (7 个)
+
+training/engine.py                        scripts/
+training/loop.py                          └── run_cassava_experiments.sh
+training/hooks/                           
+                                           tools/
+                                           └── analyze.py
+                                           
+                                           projects/cassava/
+                                           ├── AGENTS.md   ← 你在这里
+                                           └── tools/analyze.py
 ```
 
 ---
 
 ## 启动方式
 
-### 单卡顺序实验（7 个模型依次跑）
-
 ```bash
-bash projects/cassava/scripts/run.sh
-```
-
-### 单机多卡训练（torchrun）
-
-```bash
-# 2 卡 ResNet-50
-CUDA_VISIBLE_DEVICES=0,1 bash projects/cassava/scripts/ddp_run.sh \
-    configs/experiments/cassava_resnet50.yaml
-
-# 4 卡 ViT-B/16
-CUDA_VISIBLE_DEVICES=0,1,2,3 bash projects/cassava/scripts/ddp_run.sh \
-    configs/experiments/cassava_vit_b16.yaml
+# 单模型（统一入口：根目录 run_experiment.sh）
+bash run_experiment.sh configs/experiments/cassava_resnet50.yaml --gpu 6
 
 # 带参数覆盖
-CUDA_VISIBLE_DEVICES=0,1 bash projects/cassava/scripts/ddp_run.sh \
-    configs/experiments/cassava_resnet50.yaml \
-    --set schedule.steps=8000 optim.params.lr=0.02
-```
+bash run_experiment.sh configs/experiments/cassava_mlp.yaml --gpu 6 \
+    --set schedule.steps=100 data.train.batch_size=8
 
-### 训练后分析
+# 全量对比（7 模型依次跑）
+bash scripts/run_cassava_experiments.sh
 
-```bash
-python projects/cassava/tools/analyze.py \
-    configs/experiments/cassava_resnet50.yaml \
+# 训练后分析
+python tools/analyze.py configs/experiments/cassava_resnet50.yaml \
     --checkpoint work_dirs/cassava_resnet50/checkpoint_best_Accuracy.pt
 ```
 
 ---
 
-## 数据集
+## 模型列表
 
-Cassava Leaf Disease Classification:
-- 5 类：CBB, CBSD, CGM, CMD, Healthy
-- 17,117 train / 4,280 val
-- 严重类别不平衡（CMD = 61.5%）
-- 使用 FocalLoss (α=0.25, γ=2.0) 处理
+| 模型 | 配置 | 参数 | Best Acc |
+|------|------|------|----------|
+| MLP (64×64) | `cassava_mlp.yaml` | ~13M | 63.13% |
+| SimpleCNN | `cassava_simple_cnn.yaml` | ~10M | 81.82% |
+| ResNet-18 | `cassava_resnet18.yaml` | ~11M | 83.48% |
+| ResNet-34 | `cassava_resnet34.yaml` | ~21M | ~72% |
+| ResNet-50 | `cassava_resnet50.yaml` | ~25M | 待跑 |
+| ViT-B/16 | `cassava_vit_b16.yaml` | ~86M | 待跑 |
+| ViT-L/16 | `cassava_vit_l16.yaml` | ~307M | 待跑 |
 
 ---
 
-## 已测试模型
+## 添加新模型到本项目
 
-| 模型 | Best Acc | 说明 |
-|------|----------|------|
-| MLP (64×64) | 63.13% | 简单基线 |
-| SimpleCNN | 81.82% | 5 阶段 CNN，无残差 |
-| ResNet-18 | 83.48% | 当前最佳 |
-| ResNet-34 | ~72% | 震荡大 |
-| ResNet-50 | - | 待跑 |
-| ViT-B/16 | - | 待跑 |
-| ViT-L/16 | - | 待跑 |
+1. 在 `configs/models/` 添加模型配置 YAML
+2. 在 `configs/experiments/` 添加实验组合配置（`_base_: [runtime, model, dataset]`）
+3. 在 `src/elysia_cv/models/classification/cassava/plugin.py` 注册 ModelSpec
+4. 在 `scripts/run_cassava_experiments.sh` 的 EXPERIMENTS 数组添加条目

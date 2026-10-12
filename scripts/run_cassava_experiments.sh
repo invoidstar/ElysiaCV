@@ -2,27 +2,46 @@
 # ==========================================================================
 # Cassava Fine-Grained Classification — Experiment Comparison
 #
-# GPU:        6 (RTX 3090, 24GB)
-# Epochs:     30  (all models)
-# Eff. Batch: 32  (all models, via gradient accumulation for ViT)
-#
-# ViT-B: batch=16 + grad_accum=2 → effective batch=32
-# ViT-L: batch=8  + grad_accum=4 → effective batch=32
-# Others: batch=32
+# Usage:
+#   bash scripts/run_cassava_experiments.sh              # 单卡 (GPU 6)
+#   bash scripts/run_cassava_experiments.sh --gpu 7      # 指定 GPU
+#   bash scripts/run_cassava_experiments.sh --ddp 2      # 2 卡 DDP
+#   bash scripts/run_cassava_experiments.sh --gpu 4 --ddp 2  # GPU 4,5
 # ==========================================================================
 set -euo pipefail
 
 GPU=6
-export CUDA_VISIBLE_DEVICES=$GPU
+DDP_NPROC=0
+
+# ── Parse top-level flags ──────────────────────────────────────────────
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --gpu)        GPU="$2";          shift 2 ;;
+        --gpu=*)      GPU="${1#*=}";     shift ;;
+        --ddp)        DDP_NPROC="$2";    shift 2 ;;
+        --ddp=*)      DDP_NPROC="${1#*=}"; shift ;;
+        -h|--help)
+            echo "Usage: bash scripts/run_cassava_experiments.sh [--gpu N] [--ddp N]"
+            exit 0
+            ;;
+        *) shift ;;
+    esac
+done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 CONFIG_DIR="$PROJECT_DIR/configs/experiments"
 
+# ── Header ─────────────────────────────────────────────────────────────
 echo "=============================================="
 echo " Cassava Fine-Grained Experiment Suite"
 echo "=============================================="
-echo " GPU:           $GPU ($(nvidia-smi -i $GPU --query-gpu=name --format=csv,noheader 2>/dev/null || echo unknown))"
+if [[ $DDP_NPROC -gt 0 ]]; then
+    echo " Mode:          DDP ($DDP_NPROC GPUs)"
+    echo " GPU:           ${GPU} → $((GPU + DDP_NPROC - 1))"
+else
+    echo " GPU:           $GPU ($(nvidia-smi -i $GPU --query-gpu=name --format=csv,noheader 2>/dev/null || echo unknown))"
+fi
 echo " Epochs:        30"
 echo " Eff. Batch:    32"
 echo " Output:        work_dirs/cassava_<model>/"
@@ -30,7 +49,7 @@ echo "=============================================="
 echo ""
 
 # ── Experiment definitions ─────────────────────────────────────────────
-# Format: name|config_file|extra_overrides (space-separated key=value pairs)
+# Format: name|config_file|extra_overrides
 
 EXPERIMENTS=(
     # name              config_file               extra overrides
@@ -68,11 +87,18 @@ run_experiment() {
         [[ -n "$ov" ]] && set_args+=(--set "$ov")
     done
 
+    # Build launcher args
+    local launcher_args=("$config_path")
+    if [[ $DDP_NPROC -gt 0 ]]; then
+        launcher_args+=(--ddp "$DDP_NPROC" --gpu "$GPU")
+    else
+        launcher_args+=(--gpu "$GPU")
+    fi
+    launcher_args+=("${set_args[@]}")
+
     # Use run_experiment.sh for unified launch
     bash "$PROJECT_DIR/run_experiment.sh" \
-        "$config_path" \
-        --gpu "$GPU" \
-        "${set_args[@]}" \
+        "${launcher_args[@]}" \
         2>&1 | tee "$log_file"
 
     local exit_code=${PIPESTATUS[0]}
@@ -119,7 +145,7 @@ else
         read -ra parts <<< "$exp_line"
         name="${parts[0]}"
         echo "  cassava_${name}/  ├── train.log"
-        echo "                    ├── checkpoint_best.pt"
+        echo "                    ├── checkpoint_best_Accuracy.pt"
         echo "                    └── checkpoint_final.pt"
     done
 fi

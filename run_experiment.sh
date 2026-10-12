@@ -5,8 +5,10 @@
 # Modeled after ElysiaRobot's run_policy.sh.  One config YAML, one command.
 #
 # Usage:
-#   bash run_experiment.sh configs/classification/cassava_resnet50.yaml
-#   bash run_experiment.sh configs/classification/cassava_resnet50.yaml --gpu 6
+#   bash run_experiment.sh configs/experiments/cassava_resnet50.yaml
+#   bash run_experiment.sh configs/experiments/cassava_resnet50.yaml --gpu 6
+#   bash run_experiment.sh configs/experiments/cassava_resnet50.yaml --ddp 2
+#   bash run_experiment.sh configs/experiments/cassava_resnet50.yaml --gpu 0,1 --ddp 2
 #   bash run_experiment.sh configs/experiments/cassava_resnet50.yaml --dry-run
 #   bash run_experiment.sh configs/experiments/cassava_resnet50.yaml --set optim.params.lr=0.001
 # ==========================================================================
@@ -38,6 +40,8 @@ export PYTHONDONTWRITEBYTECODE=1
 
 # ── Defaults ───────────────────────────────────────────────────────────
 GPU=""
+DDP_NPROC=0
+DDP_MASTER_PORT="${ELYSIA_DDP_PORT:-29500}"
 SET_OVERRIDES=()
 DRY_RUN=0
 PRINT_COMMAND=0
@@ -47,16 +51,27 @@ _print_usage() {
 Usage: bash run_experiment.sh <config.yaml> [options]
 
 Options:
-  --gpu N               Use GPU N (sets CUDA_VISIBLE_DEVICES=N)
-  --set KEY=VALUE ...   Override config values (e.g. --set optim.params.lr=0.001)
-  --dry-run, -n         Validate config without training
-  --print-command       Print the command without executing
-  -h, --help            Show this help
+  --gpu N|N,N,N        GPU device(s).  Single number or comma-separated list.
+                         DDP mode auto-expands: --gpu 4 --ddp 2 → GPUs 4,5.
+  --ddp N              Enable DDP with N GPUs (via torchrun).
+  --master-port PORT   torchrun master port (default: 29500).
+  --set KEY=VALUE ...  Override config values (e.g. --set optim.params.lr=0.001)
+  --dry-run, -n        Validate config without training.
+  --print-command      Print the command without executing.
+  -h, --help           Show this help.
 
 Examples:
-  bash run_experiment.sh configs/experiments/cassava_resnet50.yaml
+  # Single GPU
   bash run_experiment.sh configs/experiments/cassava_resnet50.yaml --gpu 6
-  bash run_experiment.sh configs/experiments/cassava_vit_b16.yaml --gpu 6 --set optim.params.lr=0.0005
+
+  # DDP on 2 GPUs (auto-detect from CUDA_VISIBLE_DEVICES)
+  bash run_experiment.sh configs/experiments/cassava_resnet50.yaml --ddp 2
+
+  # DDP on specific GPUs (4,5)
+  bash run_experiment.sh configs/experiments/cassava_resnet50.yaml --gpu 4 --ddp 2
+
+  # DDP on explicit GPU list
+  CUDA_VISIBLE_DEVICES=0,1,2,3 bash run_experiment.sh configs/experiments/cassava_vit_b16.yaml --ddp 4
 
 Available configs:
 USAGE
@@ -101,6 +116,22 @@ while [[ $# -gt 0 ]]; do
             GPU="${1#*=}"
             shift
             ;;
+        --ddp)
+            DDP_NPROC="$2"
+            shift 2
+            ;;
+        --ddp=*)
+            DDP_NPROC="${1#*=}"
+            shift
+            ;;
+        --master-port)
+            DDP_MASTER_PORT="$2"
+            shift 2
+            ;;
+        --master-port=*)
+            DDP_MASTER_PORT="${1#*=}"
+            shift
+            ;;
         --set)
             # Collect all --set KEY=VALUE pairs
             while [[ $# -gt 1 && "$2" != --* ]]; do
@@ -129,23 +160,87 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ── GPU setup ──────────────────────────────────────────────────────────
-if [[ -n "$GPU" ]]; then
-    export CUDA_VISIBLE_DEVICES="$GPU"
-    echo "[launcher] GPU: $GPU ($(nvidia-smi -i "$GPU" --query-gpu=name --format=csv,noheader 2>/dev/null || echo 'unknown'))"
+_auto_detect_gpus() {
+    nvidia-smi -L 2>/dev/null | wc -l || echo "0"
+}
+
+if [[ $DDP_NPROC -gt 0 ]]; then
+    # ── DDP mode ───────────────────────────────────────────────────────
+    if ! command -v torchrun &>/dev/null; then
+        echo "ERROR: torchrun not found. Install PyTorch >= 1.10 or set PATH."
+        exit 1
+    fi
+
+    if [[ -z "$GPU" ]]; then
+        # Auto-detect: use CUDA_VISIBLE_DEVICES if set, else all GPUs
+        if [[ -n "${CUDA_VISIBLE_DEVICES:-}" ]]; then
+            IFS=',' read -ra gpu_list <<< "$CUDA_VISIBLE_DEVICES"
+        else
+            total=$(_auto_detect_gpus)
+            gpu_list=($(seq 0 $((total - 1))))
+        fi
+
+        if [[ ${#gpu_list[@]} -lt $DDP_NPROC ]]; then
+            echo "ERROR: need $DDP_NPROC GPUs for DDP, but only ${#gpu_list[@]} available."
+            echo "       Set CUDA_VISIBLE_DEVICES or use --gpu START_GPU"
+            exit 1
+        fi
+
+        # Use first N GPUs
+        ddp_gpus=("${gpu_list[@]:0:$DDP_NPROC}")
+        GPU_STR=$(IFS=','; echo "${ddp_gpus[*]}")
+    else
+        # --gpu with DDP: expand from starting GPU
+        if [[ "$GPU" =~ ^[0-9]+$ ]]; then
+            # Single number → range start,start+1,...,start+N-1
+            ddp_gpus=($(seq "$GPU" $((GPU + DDP_NPROC - 1))))
+            GPU_STR=$(IFS=','; echo "${ddp_gpus[*]}")
+        else
+            # Already comma-separated list
+            IFS=',' read -ra ddp_gpus <<< "$GPU"
+            if [[ ${#ddp_gpus[@]} -lt $DDP_NPROC ]]; then
+                echo "ERROR: DDP needs $DDP_NPROC GPUs, but only ${#ddp_gpus[@]} given."
+                exit 1
+            fi
+            ddp_gpus=("${ddp_gpus[@]:0:$DDP_NPROC}")
+            GPU_STR=$(IFS=','; echo "${ddp_gpus[*]}")
+        fi
+    fi
+
+    export CUDA_VISIBLE_DEVICES="$GPU_STR"
+    echo "[launcher] DDP mode: $DDP_NPROC GPUs ($GPU_STR)"
+
 else
-    echo "[launcher] GPU: auto (CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset})"
+    # ── Single GPU mode ─────────────────────────────────────────────────
+    if [[ -z "$GPU" ]]; then
+        GPU="${CUDA_VISIBLE_DEVICES:-auto}"
+        echo "[launcher] GPU: $GPU"
+    else
+        export CUDA_VISIBLE_DEVICES="$GPU"
+        echo "[launcher] GPU: $GPU ($(nvidia-smi -i "$GPU" --query-gpu=name --format=csv,noheader 2>/dev/null || echo 'unknown'))"
+    fi
 fi
 
 # ── Build command ──────────────────────────────────────────────────────
-CMD=(
-    "$PYTHON_BIN" "$PROJECT_ROOT/tools/train.py"
-    "$CONFIG"
-)
+if [[ $DDP_NPROC -gt 0 ]]; then
+    CMD=(
+        torchrun
+        --nproc_per_node="$DDP_NPROC"
+        --master_port="$DDP_MASTER_PORT"
+        "$PROJECT_ROOT/tools/train.py"
+        "$CONFIG"
+    )
+else
+    CMD=(
+        "$PYTHON_BIN" "$PROJECT_ROOT/tools/train.py"
+        "$CONFIG"
+    )
+fi
 
-# Append overrides
-for ov in "${SET_OVERRIDES[@]}"; do
-    CMD+=(--set "$ov")
-done
+# Append overrides (single --set with all values, argparse nargs="*" semantics)
+if [ ${#SET_OVERRIDES[@]} -gt 0 ]; then
+    CMD+=(--set "${SET_OVERRIDES[@]}")
+fi
 
 # ── Conda activation hint ──────────────────────────────────────────────
 CONDA_PREFIX="${CONDA_PREFIX:-}"
@@ -161,6 +256,7 @@ if [[ $DRY_RUN -eq 1 ]]; then
     echo "[launcher] DRY-RUN MODE — validating config only"
     echo "  Config:   $CONFIG"
     echo "  GPU:      ${GPU:-auto}"
+    echo "  DDP:      $([[ $DDP_NPROC -gt 0 ]] && echo "yes ($DDP_NPROC GPUs)" || echo "no")"
     echo "  Overrides: ${#SET_OVERRIDES[@]}"
     for ov in "${SET_OVERRIDES[@]}"; do
         echo "    --set $ov"

@@ -22,39 +22,54 @@ ElysiaCV 是一个面向计算机视觉（分类、检测、分割）的统一�
 
 ## 2. 项目结构
 
+> **⼯程侧** (framework) 与 **项目侧** (project) 在代码上同居一个仓库，靠文档区分。
+> 类似于 ElysiaRobot（框架）与 mstvla4resta（使用框架的项目）的关系。
+
 ```
 ElysiaCV/
-├── configs/                          # ⬅️ 实验从这里开始
-│   ├── _base_/default_runtime.yaml   #    引擎、tracking、dataloader 全局默认值
-│   ├── models/                       #    纯模型定义（架构 + 优化器 + 学习率调度）
-│   ├── datasets/                     #    纯数据集定义（仅 data 段）
-│   └── experiments/                  #    组合 = model + dataset + 覆盖项
 │
-├── src/elysia_cv/                    # 工程侧 — Python 包
-│   ├── core/                         # 零依赖基础设施（Registry, Plugin）
-│   ├── config/                       # 配置加载与校验（_base_ 继承）
-│   ├── components/                   # 共享组件：backbones, necks, heads
-│   ├── models/                       # 模型契约 + 参考运行时代码
-│   │   └── classification/cassava/   #   Cassava 分类模型（参考实现）
-│   ├── training/                     # 训练基础设施（Engine, Loop, Hooks, DDP）
-│   ├── data/                         # 通用数据层
-│   ├── losses/                       # 损失函数（FocalLoss, CrossEntropy...）
-│   ├── metrics/                      # 评估指标
-│   ├── optim/                        # 优化器与调度器构建
-│   └── cli.py                        # CLI 入口（train via TrainingEngine）
+│  ╔══════════════════════════════════════════════════════════════╗
+│  ║  🏗️ 工程侧 — 可复用框架代码 (src/elysia_cv/)                ║
+│  ╠══════════════════════════════════════════════════════════════╣
+│  ║                                                              ║
+├──╢ src/elysia_cv/                                               ║
+│  ║ ├── core/           零依赖基础设施 (Registry, Plugin, Errors) ║
+│  ║ ├── config/         配置加载、_base_ 合并、校验               ║
+│  ║ ├── components/     共享 Backbone / Neck / Head 组件库        ║
+│  ║ ├── losses/         损失函数 (FocalLoss, CrossEntropy...)     ║
+│  ║ ├── metrics/        评估指标                                  ║
+│  ║ ├── optim/          优化器与调度器构建器                       ║
+│  ║ ├── data/           通用数据加载层                             ║
+│  ║ ├── models/         模型契约 + 参考插件                        ║
+│  ║ ├── training/       训练引擎 (Loop, Hooks, DDP, Engine)       ║
+│  ║ └── cli.py          统一 CLI 入口                             ║
+│  ║                                                              ║
+│  ╚══════════════════════════════════════════════════════════════╝
 │
-├── projects/                         # 项目侧 — 具体实验
-│   └── cassava/                      #   Cassava 叶片病害分类项目
-│       ├── scripts/run.sh            #     单机单卡顺序实验
-│       ├── scripts/ddp_run.sh        #     单机多卡 (torchrun)
-│       └── tools/analyze.py          #     混淆矩阵 + GradCAM
+├── tools/train.py                ← 训练入口（调用 cli.py）
+├── tools/test.py / infer.py
 │
-├── tools/                            # 框架级工具
-│   └── train.py                      #   训练入口
+│  ╔══════════════════════════════════════════════════════════════╗
+│  ║  📦 项目侧 — Cassava 木薯叶片病害分类实验                     ║
+│  ╠══════════════════════════════════════════════════════════════╣
+│  ║  详见 projects/cassava/AGENTS.md                              ║
+│  ║                                                              ║
+├──╢ configs/                                                     ║
+│  ║ ├── models/mlp.yaml .. vit_l16.yaml    模型定义 (7 个)        ║
+│  ║ ├── datasets/cassava.yaml              Cassava 数据集         ║
+│  ║ └── experiments/cassava_*.yaml         实验组合 (7 个)        ║
+│  ║                                                              ║
+├──╢ scripts/run_cassava_experiments.sh     批量实验启动脚本        ║
+├──╢ tools/analyze.py                       训练后分析              ║
+├──╢ projects/cassava/                      项目文档目录            ║
+│  ║ ├── AGENTS.md                          项目约定与实验记录      ║
+│  ║ └── tools/analyze.py                   混淆矩阵 + GradCAM     ║
+│  ║                                                              ║
+│  ╚══════════════════════════════════════════════════════════════╝
 │
-├── tests/                            # pytest（7 个测试文件）
-├── docs/                             # 指南和架构文档
-└── AGENTS.md                         # ← 你在这里
+├── tests/                         pytest
+├── docs/                          指南和架构文档
+└── AGENTS.md                      ← 你在这里（根文档）
 ```
 
 ---

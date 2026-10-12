@@ -76,8 +76,10 @@ def _cmd_train(args: argparse.Namespace) -> None:
     if args.set:
         cfg = _apply_cli_overrides(cfg, args.set)
 
-    # 2. Print training header
-    _print_training_header(cfg)
+    # 2. Print training header (rank 0 only in DDP)
+    _is_main = int(os.environ.get("LOCAL_RANK", "0")) == 0
+    if _is_main:
+        _print_training_header(cfg)
 
     # 3. Build task-specific model + dataloader functions
     build_model_fn = _make_build_model_fn(cfg)
