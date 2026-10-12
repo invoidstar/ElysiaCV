@@ -19,6 +19,7 @@ class LoggerHook(Hook):
     - **Non-TTY mode** (piped / tee): prints timestamped lines every ``log_freq`` steps
       with estimated remaining time.
     - Total parameter count and GPU name are shown once in ``before_run``.
+    - ``after_run`` prints a "Training Complete" summary box with best accuracy.
 
     Parameters
     ----------
@@ -39,7 +40,8 @@ class LoggerHook(Hook):
         self._is_tty = sys.stdout.isatty()
         self._pbar = None
         self._loss_window: list[float] = []
-        self._result_lines: list[str] = []  # accumulated for final print
+        self._best_acc: float | None = None  # tracked from EvalHook
+        self._final_ckpt: str = ""  # tracked from CheckpointHook
         self._is_main = self._should_log()
 
         # Try to import tqdm for TTY mode
@@ -128,32 +130,48 @@ class LoggerHook(Hook):
             return
         if self._pbar is not None:
             self._pbar.close()
+
+        step = loop.state.global_step
         elapsed = time.time() - self._start_time
         print(
             f"\n  [{self._timestamp()}] Training finished in {_format_time(elapsed)}"
-            f"  ({loop.state.global_step:,} steps)",
+            f"  ({step:,} steps)",
             flush=True,
         )
-        # Print accumulated results (from EvalHook / CheckpointHook)
-        for line in self._result_lines:
-            print(line, flush=True)
+
+        # ── Final summary box ──────────────────────────────────
+        W = 62
+        print("", flush=True)
+        print("╔" + "═" * W + "╗", flush=True)
+        print("║" + "  Training Complete".ljust(W) + "║", flush=True)
+        print("║" + f"  Steps:      {step:,}".ljust(W) + "║", flush=True)
+        if self._best_acc is not None:
+            print("║" + f"  Best Acc:   {self._best_acc:.4f}".ljust(W) + "║", flush=True)
+        if self._final_ckpt:
+            ckpt = self._final_ckpt.split("/")[-2] + "/" + self._final_ckpt.split("/")[-1] if "/" in self._final_ckpt else self._final_ckpt
+            print("║" + f"  Checkpoint: {ckpt}".ljust(W) + "║", flush=True)
+        print("╚" + "═" * W + "╝", flush=True)
 
     # ── Callbacks for other hooks to relay messages ────────────
 
     def on_eval_result(self, step: int, acc: float, val_loss: float, improved: bool) -> None:
-        """Record eval result for final summary."""
+        """Record eval result — called by EvalHook. Prints immediately."""
+        # Track best accuracy for final summary
+        if self._best_acc is None or acc > self._best_acc:
+            self._best_acc = acc
+
         flag = " *" if improved else ""
         msg = f"  [eval]  step {step:>6,d}  acc={acc:.4f}  val_loss={val_loss:.4f}{flag}"
-        self._result_lines.append(msg)
         if self._pbar is not None:
             self._pbar.write(msg)
         else:
             print(msg, flush=True)
 
-    def on_checkpoint_saved(self, name: str) -> None:
-        """Record checkpoint save."""
+    def on_checkpoint_saved(self, name: str, path: str = "") -> None:
+        """Record checkpoint save — called by CheckpointHook. Prints immediately."""
+        if "final" in name:
+            self._final_ckpt = path
         msg = f"  [checkpoint] {name}"
-        self._result_lines.append(msg)
         if self._pbar is not None:
             self._pbar.write(msg)
         else:

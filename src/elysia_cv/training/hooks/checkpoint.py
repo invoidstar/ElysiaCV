@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +35,6 @@ class CheckpointHook(Hook):
         self.max_keep = max_keep
         self.best_value = -float("inf")
         self._saved_paths: list[Path] = []
-        self._is_tty = sys.stdout.isatty()
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def after_step(self, loop) -> None:
@@ -80,13 +78,14 @@ class CheckpointHook(Hook):
         meta = {"step": step, "tag": tag, "path": str(path)}
         (self.output_dir / f"checkpoint_{tag}.json").write_text(json.dumps(meta, indent=2))
 
-        msg = f"  [checkpoint] {filename}"
+        # Notify LoggerHook for logging + final summary tracking
+        self._notify_logger(loop, name=filename, path=str(path))
 
-        if self._is_tty:
-            import tqdm
-            tqdm.tqdm.write(msg)
-        else:
-            print(msg, flush=True)
+    def _notify_logger(self, loop, **kwargs) -> None:
+        """Call ``on_checkpoint_saved`` on any registered LoggerHook."""
+        for hook in loop.callback._hooks:
+            if hasattr(hook, "on_checkpoint_saved"):
+                hook.on_checkpoint_saved(**kwargs)
 
     def _cleanup_old(self) -> None:
         if len(self._saved_paths) <= self.max_keep:

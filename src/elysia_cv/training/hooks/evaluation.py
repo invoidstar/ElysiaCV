@@ -1,8 +1,7 @@
-"""EvalHook — run evaluation at regular intervals with TTY-aware output."""
+"""EvalHook — run evaluation at regular intervals, notify LoggerHook + CheckpointHook."""
 
 from __future__ import annotations
 
-import sys
 from typing import Any
 
 import torch
@@ -14,9 +13,8 @@ from elysia_cv.training.distributed import unwrap_model
 class EvalHook(Hook):
     """Evaluate model on validation set periodically.
 
-    Output is TTY-aware: in interactive terminals the eval line appears
-    above the tqdm progress bar (via ``pbar.write``); in piped/tee mode
-    it prints as a regular line.
+    Informs LoggerHook (for logging + final summary) and CheckpointHook
+    (for best-checkpoint saving) via the hook bus.
     """
 
     def __init__(
@@ -31,7 +29,6 @@ class EvalHook(Hook):
         self.metric_names = metrics or ["Accuracy"]
         self.save_best_metric = save_best_metric
         self._best_value = -float("inf")
-        self._is_tty = sys.stdout.isatty()
 
     def after_step(self, loop) -> None:
         step = loop.state.global_step
@@ -52,21 +49,20 @@ class EvalHook(Hook):
         if improved:
             self._best_value = acc
 
-        flag = " *" if improved else ""
-        msg = f"  [eval]  step {step:>6,d}  acc={acc:.4f}  val_loss={val_loss:.4f}{flag}"
-
-        if self._is_tty:
-            # Print above tqdm progress bar
-            import tqdm
-            tqdm.tqdm.write(msg)
-        else:
-            print(msg, flush=True)
+        # Notify LoggerHook (for printing + final summary tracking)
+        self._notify_logger(loop, "on_eval_result", step=step, acc=acc, val_loss=val_loss, improved=improved)
 
         # Notify CheckpointHook to save best
         if self.save_best_metric and acc > 0:
             for hook in loop.callback._hooks:
                 if hasattr(hook, "maybe_save_best"):
                     hook.maybe_save_best(acc, loop)
+
+    def _notify_logger(self, loop, method: str, **kwargs) -> None:
+        """Call *method* on any registered LoggerHook."""
+        for hook in loop.callback._hooks:
+            if hasattr(hook, method):
+                getattr(hook, method)(**kwargs)
 
     def _evaluate(self, model, device) -> dict[str, float]:
         """Basic evaluation loop."""

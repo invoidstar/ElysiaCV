@@ -99,18 +99,18 @@ class TrainingEngine:
             grad_clip_norm=self.config.engine.optimization.grad_clip_norm,
         )
 
-        # 6. Build hooks
+        # 6. Build hooks (order matters: Checkpoint → Logger for final summary)
         hooks = HookBus()
-        hooks.register(LoggerHook(
-            log_freq=self.config.tracking.log_freq,
-            total_steps=self.config.schedule.steps,
-        ))
-        hooks.register(LrSchedulerHook())
         hooks.register(CheckpointHook(
             output_dir=self.config.run.output_dir,
             save_freq=self.config.eval.eval_freq,  # same cadence as validation
             save_best_metric=self.config.eval.save_best,
             save_final=self.config.eval.save_final,
+        ))
+        hooks.register(LrSchedulerHook())
+        hooks.register(LoggerHook(
+            log_freq=self.config.tracking.log_freq,
+            total_steps=self.config.schedule.steps,
         ))
         if val_loader is not None:
             hooks.register(EvalHook(
