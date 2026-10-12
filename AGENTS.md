@@ -30,23 +30,27 @@ ElysiaCV/
 │   ├── datasets/                     #    纯数据集定义（仅 data 段）
 │   └── experiments/                  #    组合 = model + dataset + 覆盖项
 │
-├── src/elysia_cv/                    # Python 包
-│   ├── core/                         # 零依赖基础设施
-│   ├── config/                       # 配置加载与校验
-│   ├── models/                       # 任务级模型插件
-│   ├── components/                   # 共享组件（通过 Registry 注册）
-│   ├── training/                     # 训练基础设施
-│   ├── data/                         # 数据加载
-│   ├── losses/                       # 损失函数
+├── src/elysia_cv/                    # 工程侧 — Python 包
+│   ├── core/                         # 零依赖基础设施（Registry, Plugin）
+│   ├── config/                       # 配置加载与校验（_base_ 继承）
+│   ├── components/                   # 共享组件：backbones, necks, heads
+│   ├── models/                       # 模型契约 + 参考运行时代码
+│   │   └── classification/cassava/   #   Cassava 分类模型（参考实现）
+│   ├── training/                     # 训练基础设施（Engine, Loop, Hooks, DDP）
+│   ├── data/                         # 通用数据层
+│   ├── losses/                       # 损失函数（FocalLoss, CrossEntropy...）
 │   ├── metrics/                      # 评估指标
-│   └── optim/                        # 优化器与调度器构建器
+│   ├── optim/                        # 优化器与调度器构建
+│   └── cli.py                        # CLI 入口（train via TrainingEngine）
 │
-├── tools/                            # 独立脚本
-│   ├── train.py                      #   训练入口
-│   └── analyze.py                    #   训练后分析（混淆矩阵 + GradCAM）
+├── projects/                         # 项目侧 — 具体实验
+│   └── cassava/                      #   Cassava 叶片病害分类项目
+│       ├── scripts/run.sh            #     单机单卡顺序实验
+│       ├── scripts/ddp_run.sh        #     单机多卡 (torchrun)
+│       └── tools/analyze.py          #     混淆矩阵 + GradCAM
 │
-├── scripts/                          # 批量实验启动脚本
-│   └── run_cassava_experiments.sh    #   按顺序跑全部 7 个 Cassava 模型
+├── tools/                            # 框架级工具
+│   └── train.py                      #   训练入口
 │
 ├── tests/                            # pytest（7 个测试文件）
 ├── docs/                             # 指南和架构文档
@@ -139,15 +143,19 @@ black --check src/ tests/ tools/
 ### 4.4 运行实验
 
 ```bash
-# 单模型
+# 单卡
 python tools/train.py configs/experiments/cassava_resnet50.yaml
+
+# 多卡 (torchrun)
+CUDA_VISIBLE_DEVICES=0,1 bash projects/cassava/scripts/ddp_run.sh \
+    configs/experiments/cassava_resnet50.yaml
 
 # 带覆盖
 python tools/train.py configs/experiments/cassava_vit_b16.yaml \
     --set schedule.steps=100 optim.params.lr=0.001
 
-# 全量对比
-bash scripts/run_cassava_experiments.sh
+# 全量对比（单机单卡顺序）
+bash projects/cassava/scripts/run.sh
 ```
 
 ### 4.5 训练后分析
@@ -210,10 +218,11 @@ style:    格式化、lint（不改变代码逻辑）
 
 | 问题 | 状态 | 详情 |
 |------|------|------|
-| CLI 绕过 TrainerLoop | ⚠️ | `cli.py` 使用直接训练循环，未使用 `TrainerLoop`/`HookBus` |
+| CLI ↔ TrainerLoop 统一 | ✅ | `cli.py` 已使用 `TrainingEngine` → `TrainerLoop` + `HookBus` |
+| 配置模型/数据集分离 | ✅ | 拆分为 `configs/{models,datasets,experiments}/` |
+| DDP 支持 | ✅ | `TrainingEngine` 内置 DDP init + `wrap_ddp` + `no_sync` |
 | `test.py`/`infer.py` | ⚠️ | 占位实现 |
 | Detection runtime | ⚠️ | 使用随机伪标签 |
 | MeanAP metric | ⚠️ | 占位实现 |
-| ViT-L OOM | ✅ | 已修复：batch=4 + grad_accum=8 |
 
 详见 `docs/status/current.md`。

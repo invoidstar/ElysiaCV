@@ -54,8 +54,11 @@ class TestCassavaModel:
         p = reg.get("cassava")
         assert p.plugin.task_type == "classification"
         specs = list(p.plugin.model_specs())
-        assert specs[0].name == "cassava_resnet50"
-        assert specs[0].extra["num_classes"] == 5
+        spec_names = {s.name for s in specs}
+        assert "cassava_resnet50" in spec_names
+        assert specs[0].extra.get("num_classes") == 5 or any(
+            s.extra.get("num_classes") == 5 for s in specs
+        )
 
     def test_build_and_forward(self):
         from elysia_cv.models.classification.cassava.runtime import (

@@ -40,16 +40,48 @@ def build_model(cfg: dict[str, Any]) -> nn.Module:
 
 
 class CassavaModel(nn.Module):
-    """Simple backbone + head for fine-grained classification."""
+    """Simple backbone + head for fine-grained classification.
+
+    Supports two forward modes:
+
+    - **Inference**: ``model(x)`` → ``{"logits": Tensor}``
+    - **Training**: ``model(x, gt_label=labels)`` → ``{"loss": Tensor, "logits": Tensor,
+      "losses": {"focal": Tensor}, "metrics": {"acc": Tensor}}``
+
+    The training mode is designed to work directly with
+    :class:`TrainerLoop._forward`, which unpacks non-input batch keys as kwargs.
+    """
 
     def __init__(self, backbone: nn.Module, head: nn.Module) -> None:
         super().__init__()
         self.backbone = backbone
         self.head = head
+        self._loss_cfg: dict[str, Any] = {"type": "FocalLoss", "alpha": 0.25, "gamma": 2.0}
 
-    def forward(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
+    def forward(self, x: torch.Tensor, gt_label: torch.Tensor | None = None) -> dict[str, torch.Tensor]:
         feats = self.backbone(x)
-        logits = self.head(feats)
+        head_out = self.head(feats)
+
+        # Normalize: head may return tensor or {"logits": tensor}
+        if isinstance(head_out, dict):
+            logits = head_out["logits"]
+        else:
+            logits = head_out
+
+        if gt_label is not None:
+            # ── Training path (TrainerLoop._forward calls model(x, gt_label=labels))
+            loss_fn = LOSSES.build(self._loss_cfg)
+            loss = loss_fn(logits, gt_label)
+            pred = logits.argmax(dim=1)
+            acc = (pred == gt_label).float().mean()
+            return {
+                "loss": loss,
+                "logits": logits,
+                "losses": {"focal": loss.detach()},
+                "metrics": {"acc": acc.detach()},
+            }
+
+        # ── Inference path (EvalHook / forward_test)
         return {"logits": logits}
 
 

@@ -1,9 +1,10 @@
-"""CheckpointHook — save model / optimizer / scheduler state periodically."""
+"""CheckpointHook — save model / optimizer / scheduler state with TTY-aware output."""
 
 from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,11 @@ from elysia_cv.training.distributed import unwrap_model
 
 
 class CheckpointHook(Hook):
-    """Save checkpoints at regular intervals and on completion."""
+    """Save checkpoints at regular intervals and on completion.
+
+    Output is TTY-aware: in interactive terminals the message appears
+    above the tqdm progress bar; in piped/tee mode it prints as a line.
+    """
 
     def __init__(
         self,
@@ -31,6 +36,7 @@ class CheckpointHook(Hook):
         self.max_keep = max_keep
         self.best_value = -float("inf")
         self._saved_paths: list[Path] = []
+        self._is_tty = sys.stdout.isatty()
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def after_step(self, loop) -> None:
@@ -65,13 +71,22 @@ class CheckpointHook(Hook):
         if hasattr(loop, "scheduler") and loop.scheduler is not None:
             checkpoint["scheduler_state_dict"] = loop.scheduler.state_dict()
 
-        path = self.output_dir / f"checkpoint_{tag}.pt"
+        filename = f"checkpoint_{tag}.pt"
+        path = self.output_dir / filename
         torch.save(checkpoint, str(path))
         self._saved_paths.append(path)
 
         # Write step metadata
         meta = {"step": step, "tag": tag, "path": str(path)}
         (self.output_dir / f"checkpoint_{tag}.json").write_text(json.dumps(meta, indent=2))
+
+        msg = f"  [checkpoint] {filename}"
+
+        if self._is_tty:
+            import tqdm
+            tqdm.tqdm.write(msg)
+        else:
+            print(msg, flush=True)
 
     def _cleanup_old(self) -> None:
         if len(self._saved_paths) <= self.max_keep:

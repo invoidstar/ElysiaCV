@@ -1,7 +1,8 @@
-"""EvalHook — run evaluation at regular intervals."""
+"""EvalHook — run evaluation at regular intervals with TTY-aware output."""
 
 from __future__ import annotations
 
+import sys
 from typing import Any
 
 import torch
@@ -11,7 +12,12 @@ from elysia_cv.training.distributed import unwrap_model
 
 
 class EvalHook(Hook):
-    """Evaluate model on validation set periodically."""
+    """Evaluate model on validation set periodically.
+
+    Output is TTY-aware: in interactive terminals the eval line appears
+    above the tqdm progress bar (via ``pbar.write``); in piped/tee mode
+    it prints as a regular line.
+    """
 
     def __init__(
         self,
@@ -24,6 +30,8 @@ class EvalHook(Hook):
         self.eval_freq = eval_freq
         self.metric_names = metrics or ["Accuracy"]
         self.save_best_metric = save_best_metric
+        self._best_value = -float("inf")
+        self._is_tty = sys.stdout.isatty()
 
     def after_step(self, loop) -> None:
         step = loop.state.global_step
@@ -31,26 +39,44 @@ class EvalHook(Hook):
             return
 
         model = loop.model
-        model.eval()
-        results = self._evaluate(model, loop.device)
+        raw_model = unwrap_model(model)
+        raw_model.eval()
 
-        if loop.distributed.enabled and loop.distributed.is_main_process:
-            print(f"\n[Eval @ step {step}] " + "  ".join(
-                f"{k}: {v:.4f}" for k, v in results.items() if isinstance(v, float)
-            ))
+        results = self._evaluate(raw_model, loop.device)
+        acc = results.get("Accuracy", 0.0)
+        val_loss = results.get("Loss", 0.0)
 
-        model.train()
+        raw_model.train()
 
-        # Notify CheckpointHook about best metric
-        if self.save_best_metric and self.save_best_metric in results:
-            for hook in loop.callbacks._hooks:
+        improved = acc > self._best_value
+        if improved:
+            self._best_value = acc
+
+        flag = " *" if improved else ""
+        msg = f"  [eval]  step {step:>6,d}  acc={acc:.4f}  val_loss={val_loss:.4f}{flag}"
+
+        if self._is_tty:
+            # Print above tqdm progress bar
+            import tqdm
+            tqdm.tqdm.write(msg)
+        else:
+            print(msg, flush=True)
+
+        # Notify CheckpointHook to save best
+        if self.save_best_metric and acc > 0:
+            for hook in loop.callback._hooks:
                 if hasattr(hook, "maybe_save_best"):
-                    hook.maybe_save_best(results[self.save_best_metric], loop)
+                    hook.maybe_save_best(acc, loop)
 
     def _evaluate(self, model, device) -> dict[str, float]:
-        """Basic evaluation loop — override for custom logic."""
+        """Basic evaluation loop."""
         total = 0
         correct = 0
+        total_loss = 0.0
+
+        # Use FocalLoss for cassava classification
+        from elysia_cv.core.registry import LOSSES
+        loss_fn = LOSSES.build({"type": "FocalLoss", "alpha": 0.25, "gamma": 2.0})
 
         with torch.no_grad():
             for batch in self.dataloader:
@@ -61,11 +87,17 @@ class EvalHook(Hook):
                         labels = labels.to(device, non_blocking=True)
                     outputs = model(inputs)
                     if isinstance(outputs, dict):
-                        outputs = outputs.get("logits", outputs.get("output"))
+                        logits = outputs.get("logits", outputs)
+                    else:
+                        logits = outputs
                     if labels is not None:
-                        pred = outputs.argmax(dim=1)
+                        total_loss += loss_fn(logits, labels).item() * labels.size(0)
+                        pred = logits.argmax(dim=1)
                         total += labels.size(0)
                         correct += (pred == labels).sum().item()
 
-        acc = correct / max(total, 1) * 100
-        return {"Accuracy": acc}
+        total = max(total, 1)
+        return {
+            "Accuracy": correct / total * 100,
+            "Loss": total_loss / total,
+        }

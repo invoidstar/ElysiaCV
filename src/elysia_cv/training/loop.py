@@ -123,10 +123,20 @@ class TrainerLoop:
                 break  # Ready for next optimizer step
 
     def _forward(self, batch: dict[str, Any]) -> dict[str, Any]:
-        """Run one forward pass. Override in subclasses for custom logic."""
+        """Run one forward pass. Override in subclasses for custom logic.
+
+        Only known label keys (``gt_label``, ``gt_bboxes``, ``gt_semantic_seg``)
+        are unpacked as kwargs; metadata keys like ``img_path`` / ``image_id``
+        are silently dropped to avoid ``TypeError``.
+        """
+        _KNOWN_LABEL_KEYS = {"gt_label", "gt_bboxes", "gt_semantic_seg", "gt_masks", "labels"}
+
         if isinstance(batch, dict) and "inputs" in batch:
             inputs = batch["inputs"].to(self.device, non_blocking=True)
-            labels = {k: v.to(self.device, non_blocking=True) if hasattr(v, "to") else v
-                      for k, v in batch.items() if k != "inputs" and k != "img_path"}
+            labels = {
+                k: v.to(self.device, non_blocking=True) if hasattr(v, "to") else v
+                for k, v in batch.items()
+                if k in _KNOWN_LABEL_KEYS
+            }
             return self.model(inputs, **labels)
         return self.model(batch)

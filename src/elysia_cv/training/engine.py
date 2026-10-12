@@ -6,7 +6,7 @@ This is the equivalent of ElysiaRobot's native_engine.py. It takes a
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 import torch
 
@@ -35,14 +35,29 @@ class TrainingEngine:
 
     Usage::
 
-        config = load_cv_config_with_object("configs/resnet50.yaml")
-        engine = TrainingEngine(config)
+        config = load_cv_config_with_object("configs/experiments/cassava_resnet50.yaml")
+        engine = TrainingEngine(
+            config,
+            build_model_fn=_my_build_model,
+            build_train_loader_fn=_my_build_train_loader,
+            build_val_loader_fn=_my_build_val_loader,
+        )
         engine.run()
     """
 
-    def __init__(self, config: CVConfig) -> None:
+    def __init__(
+        self,
+        config: CVConfig,
+        *,
+        build_model_fn: Callable[[], torch.nn.Module] | None = None,
+        build_train_loader_fn: Callable[[], Any] | None = None,
+        build_val_loader_fn: Callable[[], Any | None] | None = None,
+    ) -> None:
         self.config = config
         self._dist_ctx: DistributedContext | None = None
+        self._build_model_fn = build_model_fn
+        self._build_train_loader_fn = build_train_loader_fn
+        self._build_val_loader_fn = build_val_loader_fn
 
     def run(self) -> None:
         """Full training pipeline: init → build → loop → cleanup."""
@@ -86,11 +101,14 @@ class TrainingEngine:
 
         # 6. Build hooks
         hooks = HookBus()
-        hooks.register(LoggerHook(log_freq=self.config.tracking.log_freq))
+        hooks.register(LoggerHook(
+            log_freq=self.config.tracking.log_freq,
+            total_steps=self.config.schedule.steps,
+        ))
         hooks.register(LrSchedulerHook())
         hooks.register(CheckpointHook(
             output_dir=self.config.run.output_dir,
-            save_freq=getattr(self.config, "checkpoint", {}).get("save_freq", 5000) if hasattr(self.config, "checkpoint") else 5000,
+            save_freq=self.config.eval.eval_freq,  # same cadence as validation
             save_best_metric=self.config.eval.save_best,
             save_final=self.config.eval.save_final,
         ))
@@ -124,11 +142,8 @@ class TrainingEngine:
 
         # 9. Run
         if self._dist_ctx.is_main_process:
-            print(f"[ElysiaCV] Starting training: {self.config.run.name}")
-            print(f"  Model: {self.config.model.type}")
-            print(f"  Max steps: {self.config.schedule.steps}")
-            print(f"  Device: {device}")
-            print(f"  DDP: {self._dist_ctx.enabled} (world_size={self._dist_ctx.world_size})")
+            ddp_info = f" (DDP, world_size={self._dist_ctx.world_size})" if self._dist_ctx.enabled else ""
+            print(f"  Engine: TrainerLoop{ddp_info}, device={device}", flush=True)
 
         try:
             loop.run()
@@ -136,11 +151,14 @@ class TrainingEngine:
             destroy_distributed(self._dist_ctx)
 
     # ------------------------------------------------------------------
-    # Build helpers — override in subclasses for real task implementations
+    # Build helpers — override via constructor functions or subclass
     # ------------------------------------------------------------------
 
     def _build_train_loader(self) -> Any:
-        """Override: build training DataLoader from config."""
+        """Build training DataLoader from config, or use injected function."""
+        if self._build_train_loader_fn is not None:
+            return self._build_train_loader_fn()
+        # Default: generic ImageFolder loader
         from elysia_cv.data.dataloader import build_dataloader
         from elysia_cv.data.dataset import ImageFolderDataset
 
@@ -162,7 +180,9 @@ class TrainingEngine:
         )
 
     def _build_val_loader(self) -> Any | None:
-        """Override: build validation DataLoader from config."""
+        """Build validation DataLoader from config, or use injected function."""
+        if self._build_val_loader_fn is not None:
+            return self._build_val_loader_fn()
         val_cfg = self.config.data.val
         if not val_cfg.dataset_root:
             return None
@@ -182,10 +202,32 @@ class TrainingEngine:
         )
 
     def _build_model(self) -> torch.nn.Module:
-        """Override: build model from config."""
+        """Build model from config, or use injected function.
+
+        Priority: injected function > plugin system > torchvision fallback.
+        """
+        if self._build_model_fn is not None:
+            return self._build_model_fn()
+
+        # Try plugin system (cassava runtime)
+        model_type = self.config.model.type
+        try:
+            from elysia_cv.models.classification.cassava.runtime import build_model
+            model_cfg = {
+                "model": {
+                    "type": model_type,
+                    "backbone": dict(self.config.model.backbone),
+                    "head": dict(self.config.model.head),
+                }
+            }
+            return build_model(model_cfg)
+        except Exception:
+            pass
+
+        # Fallback: torchvision
         import torchvision
-        model_name = self.config.model.type
-        # Default: try torchvision
-        if hasattr(torchvision.models, model_name):
-            return getattr(torchvision.models, model_name)(pretrained=self.config.model.pretrained_path is not None)
-        raise ValueError(f"unknown model: {model_name!r}. Set engine._build_model in subclass.")
+        if hasattr(torchvision.models, model_type):
+            pretrained = getattr(self.config.model, "pretrained_path", None)
+            return getattr(torchvision.models, model_type)(pretrained=pretrained is not None)
+
+        raise ValueError(f"unknown model: {model_type!r}. Provide build_model_fn.")
