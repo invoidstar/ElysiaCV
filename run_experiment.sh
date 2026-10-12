@@ -7,8 +7,8 @@
 # Usage:
 #   bash run_experiment.sh configs/classification/cassava_resnet50.yaml
 #   bash run_experiment.sh configs/classification/cassava_resnet50.yaml --gpu 6
-#   bash run_experiment.sh configs/classification/cassava_resnet50.yaml --dry-run
-#   bash run_experiment.sh configs/classification/cassava_resnet50.yaml --set optim.params.lr=0.001 optim.type=AdamW
+#   bash run_experiment.sh configs/experiments/cassava_resnet50.yaml --dry-run
+#   bash run_experiment.sh configs/experiments/cassava_resnet50.yaml --set optim.params.lr=0.001
 # ==========================================================================
 set -euo pipefail
 
@@ -54,9 +54,9 @@ Options:
   -h, --help            Show this help
 
 Examples:
-  bash run_experiment.sh configs/classification/cassava_resnet50.yaml
-  bash run_experiment.sh configs/classification/cassava_resnet50.yaml --gpu 6
-  bash run_experiment.sh configs/classification/cassava_vit_b16.yaml --gpu 6 --set optim.params.lr=0.0005
+  bash run_experiment.sh configs/experiments/cassava_resnet50.yaml
+  bash run_experiment.sh configs/experiments/cassava_resnet50.yaml --gpu 6
+  bash run_experiment.sh configs/experiments/cassava_vit_b16.yaml --gpu 6 --set optim.params.lr=0.0005
 
 Available configs:
 USAGE

@@ -1,0 +1,24 @@
+# Simple CNN on Cassava
+_base_:
+  - ../_base_/default_runtime.yaml
+  - ../models/simple_cnn.yaml
+  - ../datasets/cassava.yaml
+
+run:
+  name: cassava_simple_cnn
+  output_dir: ./work_dirs/cassava_simple_cnn
+
+data:
+  train:
+    loader:
+      batch_size: 32
+  val:
+    loader:
+      batch_size: 64
+
+eval:
+  eval_freq: 1000
+  metrics:
+    - Accuracy
+  save_best: Accuracy
+  save_final: true

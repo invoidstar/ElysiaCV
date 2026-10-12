@@ -153,22 +153,65 @@ pytest tests/ -v -k "my_model"
 
 ### 步骤 4: 创建配置文件
 
+ElysiaCV 采用模型 + 数据集分离组合式配置：
+
 ```yaml
-# configs/classification/my_model_imagenet.yaml
-_base_: "../_base_/default_runtime.yaml"
-
-run:
-  name: my_model_imagenet
-  output_dir: ./work_dirs/my_model
-
+# 1) 模型配置 — configs/models/my_model.yaml
 model:
   type: my_model
   backbone:
     type: MyBackbone
-    ...
   head:
-    type: MyHead
-    num_classes: 1000
+    type: LinearClsHead
+    num_classes: 5
+    in_channels: 512
+
+optim:
+  type: SGD
+  params:
+    lr: 0.01
+    momentum: 0.9
+
+schedule:
+  type: CosineAnnealing
+  steps: 16050
+  base_lr: 0.01
+  min_lr: 0.00001
+  warmup_steps: 500
+```
+
+```yaml
+# 2) 数据集配置 — configs/datasets/my_data.yaml
+data:
+  train:
+    dataset_name: my_dataset
+    dataset_root: /data/my_dataset
+    split: train
+    loader:
+      num_workers: 4
+      pin_memory: true
+```
+
+```yaml
+# 3) 实验组合 — configs/experiments/my_experiment.yaml
+_base_:
+  - ../_base_/default_runtime.yaml
+  - ../models/my_model.yaml
+  - ../datasets/my_data.yaml
+
+run:
+  name: my_experiment
+  output_dir: ./work_dirs/my_experiment
+
+data:
+  train:
+    loader:
+      batch_size: 32
+
+eval:
+  eval_freq: 1000
+  save_best: Accuracy
+  save_final: true
 
 data:
   train:

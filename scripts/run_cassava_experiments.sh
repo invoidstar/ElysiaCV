@@ -17,12 +17,7 @@ export CUDA_VISIBLE_DEVICES=$GPU
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-CONFIG_DIR="$PROJECT_DIR/configs/classification"
-
-# ── Timestamp for log directory ────────────────────────────────────────
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-LOG_DIR="$PROJECT_DIR/logs/cassava_experiments_${TIMESTAMP}"
-mkdir -p "$LOG_DIR"
+CONFIG_DIR="$PROJECT_DIR/configs/experiments"
 
 echo "=============================================="
 echo " Cassava Fine-Grained Experiment Suite"
@@ -30,7 +25,7 @@ echo "=============================================="
 echo " GPU:           $GPU ($(nvidia-smi -i $GPU --query-gpu=name --format=csv,noheader 2>/dev/null || echo unknown))"
 echo " Epochs:        30"
 echo " Eff. Batch:    32"
-echo " Log dir:       $LOG_DIR"
+echo " Output:        work_dirs/cassava_<model>/"
 echo "=============================================="
 echo ""
 
@@ -55,7 +50,9 @@ run_experiment() {
     shift 2
     local overrides=("$@")
 
-    local log_file="$LOG_DIR/${name}.log"
+    local output_dir="$PROJECT_DIR/work_dirs/cassava_${name}"
+    mkdir -p "$output_dir"
+    local log_file="$output_dir/train.log"
     local config_path="$CONFIG_DIR/$config"
 
     echo ""
@@ -106,23 +103,23 @@ echo ""
 echo "=============================================="
 echo " Experiment Suite Complete"
 echo "=============================================="
-echo " Log dir: $LOG_DIR"
 echo ""
 
 if [ ${#FAILED[@]} -gt 0 ]; then
     echo "FAILED experiments:"
     for f in "${FAILED[@]}"; do
-        echo "  - $f → $LOG_DIR/${f}.log"
+        echo "  - $f → work_dirs/cassava_${f}/train.log"
     done
     exit 1
 else
     echo "All ${#EXPERIMENTS[@]} experiments completed successfully!"
     echo ""
-    echo "Results:"
+    echo "Results (work_dirs/):"
     for exp_line in "${EXPERIMENTS[@]}"; do
         read -ra parts <<< "$exp_line"
         name="${parts[0]}"
-        ckpt="work_dirs/cassava_${name}/checkpoint_best_Accuracy.pt"
-        echo "  $name → $ckpt"
+        echo "  cassava_${name}/  ├── train.log"
+        echo "                    ├── checkpoint_best.pt"
+        echo "                    └── checkpoint_final.pt"
     done
 fi

@@ -1,0 +1,24 @@
+# MLP baseline on Cassava
+_base_:
+  - ../_base_/default_runtime.yaml
+  - ../models/mlp.yaml
+  - ../datasets/cassava.yaml
+
+run:
+  name: cassava_mlp
+  output_dir: ./work_dirs/cassava_mlp
+
+data:
+  train:
+    loader:
+      batch_size: 32
+  val:
+    loader:
+      batch_size: 128
+
+eval:
+  eval_freq: 1000
+  metrics:
+    - Accuracy
+  save_best: Accuracy
+  save_final: true

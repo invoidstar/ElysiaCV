@@ -1,0 +1,24 @@
+# ViT-Large/16 on Cassava (batch=4 + grad_accum=8 → eff=32)
+_base_:
+  - ../_base_/default_runtime.yaml
+  - ../models/vit_l16.yaml
+  - ../datasets/cassava.yaml
+
+run:
+  name: cassava_vit_l16
+  output_dir: ./work_dirs/cassava_vit_l16
+
+data:
+  train:
+    loader:
+      batch_size: 4
+  val:
+    loader:
+      batch_size: 16
+
+eval:
+  eval_freq: 1000
+  metrics:
+    - Accuracy
+  save_best: Accuracy
+  save_final: true

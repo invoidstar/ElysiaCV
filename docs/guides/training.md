@@ -17,7 +17,10 @@ python tools/train.py <config.yaml> [--set key=value ...] [--resume checkpoint.p
 ### 启动训练
 
 ```bash
-# 分类
+# 分类（组合配置：模型 + 数据集）
+python tools/train.py configs/experiments/cassava_resnet50.yaml
+
+# 或直接指定模型和数据集（旧格式）
 python tools/train.py configs/classification/resnet50_imagenet.yaml
 
 # 检测

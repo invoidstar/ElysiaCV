@@ -1,0 +1,38 @@
+# MLP baseline: flatten image → FC layers → classify
+# Best for: quick baseline, sanity check (64×64 input, 13M params)
+
+model:
+  type: cassava_mlp
+  pretrained_path: null
+  backbone:
+    type: MLP
+    input_size: [64, 64]
+    in_channels: 3
+    hidden_dims: [1024, 512]
+    dropout: 0.3
+  head:
+    type: LinearClsHead
+    num_classes: 5
+    in_channels: 512
+    dropout: 0.2
+
+optim:
+  type: AdamW
+  params:
+    lr: 0.001
+    weight_decay: 0.0001
+
+schedule:
+  type: CosineAnnealing
+  steps: 16050
+  base_lr: 0.001
+  min_lr: 0.00001
+  warmup_steps: 300
+
+engine:
+  optimization:
+    gradient_accumulation_steps: 1
+    grad_clip_norm: null
+  precision:
+    mixed_precision: false
+    dtype: float32

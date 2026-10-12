@@ -1,0 +1,37 @@
+# ViT-Large/16 — patch=16, 304M params
+# AdamW with very low LR, heavy weight decay, 8× gradient accumulation
+
+model:
+  type: cassava_vit_l16
+  pretrained_path: null
+  backbone:
+    type: ViT
+    variant: vit_l_16
+    image_size: 448
+    pretrained: false
+    frozen_stages: 0
+    dropout: 0.1
+  head:
+    type: LinearClsHead
+    num_classes: 5
+    in_channels: 1024
+    dropout: 0.1
+
+optim:
+  type: AdamW
+  params:
+    lr: 0.0001
+    weight_decay: 0.05
+    betas: [0.9, 0.999]
+
+schedule:
+  type: CosineAnnealing
+  steps: 16050
+  base_lr: 0.0001
+  min_lr: 0.000001
+  warmup_steps: 1500
+
+engine:
+  optimization:
+    gradient_accumulation_steps: 8
+    grad_clip_norm: 1.0
