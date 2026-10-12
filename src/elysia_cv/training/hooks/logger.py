@@ -1,9 +1,10 @@
-"""LoggerHook — TTY-aware training progress logging with optional tqdm bar."""
+"""LoggerHook — TTY-aware training progress logging with tqdm bar, timestamps, and ETA."""
 
 from __future__ import annotations
 
 import sys
 import time
+from datetime import datetime, timedelta
 from typing import Any
 
 from elysia_cv.training.hooks.base import Hook
@@ -11,10 +12,12 @@ from elysia_cv.training.distributed import unwrap_model
 
 
 class LoggerHook(Hook):
-    """Log training progress with TTY-aware output.
+    """Log training progress with TTY-aware output, timestamp, and ETA.
 
-    - **TTY mode** (interactive terminal): renders a compact ``tqdm`` progress bar.
-    - **Non-TTY mode** (piped / tee): prints percentage lines every ``log_freq`` steps.
+    - **TTY mode** (interactive terminal): renders a compact ``tqdm`` progress bar
+      with built-in ``{elapsed}`` / ``{remaining}``.
+    - **Non-TTY mode** (piped / tee): prints timestamped lines every ``log_freq`` steps
+      with estimated remaining time.
     - Total parameter count and GPU name are shown once in ``before_run``.
 
     Parameters
@@ -48,6 +51,19 @@ class LoggerHook(Hook):
         else:
             self._tqdm_available = False
 
+    # ── Helpers ─────────────────────────────────────────────────
+
+    def _timestamp(self) -> str:
+        return datetime.now().strftime("%H:%M:%S")
+
+    def _eta(self, step: int) -> str:
+        """Estimated remaining time based on elapsed wall time."""
+        elapsed = time.time() - self._start_time
+        if step <= 0 or elapsed <= 0:
+            return "---"
+        total_eta = elapsed / step * (self.total_steps - step)
+        return _format_time(total_eta)
+
     # ── Hook lifecycle ──────────────────────────────────────────
 
     def before_run(self, loop) -> None:
@@ -58,7 +74,7 @@ class LoggerHook(Hook):
                 bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} "
                            "[{elapsed}<{remaining}, {rate_fmt}] {postfix}",
                 dynamic_ncols=True,
-                postfix={"loss": "---", "lr": "---"},
+                postfix={"loss": "---", "lr": "---", "eta": "---"},
             )
 
     def after_step(self, loop) -> None:
@@ -73,19 +89,23 @@ class LoggerHook(Hook):
             self._pbar.update(1)
             if step % self.log_freq == 0 and len(self._loss_window) >= self.log_freq:
                 avg = sum(self._loss_window[-self.log_freq:]) / self.log_freq
-                self._pbar.set_postfix(loss=f"{avg:.4f}", lr=f"{lr:.2e}")
+                self._pbar.set_postfix(
+                    loss=f"{avg:.4f}", lr=f"{lr:.2e}", eta=self._eta(step),
+                )
             elif step <= 5:
-                self._pbar.set_postfix(loss=f"{loss:.4f}", lr=f"{lr:.2e}")
+                self._pbar.set_postfix(
+                    loss=f"{loss:.4f}", lr=f"{lr:.2e}", eta=self._eta(step),
+                )
             return
 
-        # ── Non-TTY mode: percentage lines ────────────────────
+        # ── Non-TTY mode: timestamped percentage lines ──────────
         if step % self.log_freq == 0 or step == 1:
             window = self._loss_window[-self.log_freq:]
             avg = sum(window) / max(len(window), 1)
             pct = 100.0 * step / max(self.total_steps, 1)
             print(
-                f"  [{pct:5.1f}%] step {step:>6,d}/{self.total_steps:,d}  "
-                f"loss={avg:.4f}  lr={lr:.2e}",
+                f"  [{self._timestamp()}] [{pct:5.1f}%] step {step:>6,d}/{self.total_steps:,d}"
+                f"  loss={avg:.4f}  lr={lr:.2e}  ETA {self._eta(step)}",
                 flush=True,
             )
 
@@ -94,7 +114,7 @@ class LoggerHook(Hook):
             self._pbar.close()
         elapsed = time.time() - self._start_time
         print(
-            f"\n  Training finished in {_format_time(elapsed)}"
+            f"\n  [{self._timestamp()}] Training finished in {_format_time(elapsed)}"
             f"  ({loop.state.global_step:,} steps)",
             flush=True,
         )
