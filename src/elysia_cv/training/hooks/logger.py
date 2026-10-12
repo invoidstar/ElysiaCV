@@ -40,6 +40,7 @@ class LoggerHook(Hook):
         self._pbar = None
         self._loss_window: list[float] = []
         self._result_lines: list[str] = []  # accumulated for final print
+        self._is_main = self._should_log()
 
         # Try to import tqdm for TTY mode
         if self._is_tty:
@@ -52,6 +53,16 @@ class LoggerHook(Hook):
             self._tqdm_available = False
 
     # ── Helpers ─────────────────────────────────────────────────
+
+    def _should_log(self) -> bool:
+        """Return True if this rank should print (rank 0 in DDP, always in non-DDP)."""
+        try:
+            import torch.distributed as dist
+            if dist.is_initialized():
+                return dist.get_rank() == 0
+        except Exception:
+            pass
+        return True
 
     def _timestamp(self) -> str:
         return datetime.now().strftime("%H:%M:%S")
@@ -78,6 +89,9 @@ class LoggerHook(Hook):
             )
 
     def after_step(self, loop) -> None:
+        if not self._is_main:
+            return
+
         step = loop.state.global_step
         loss = loop.state.last_loss
         lr = loop.optimizer.param_groups[0].get("lr", 0.0)
@@ -110,6 +124,8 @@ class LoggerHook(Hook):
             )
 
     def after_run(self, loop) -> None:
+        if not self._is_main:
+            return
         if self._pbar is not None:
             self._pbar.close()
         elapsed = time.time() - self._start_time

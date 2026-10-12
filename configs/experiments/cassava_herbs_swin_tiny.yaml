@@ -1,0 +1,28 @@
+# HERBS + Swin-Tiny lightweight FGVC experiment
+_base_:
+  - ../_base_/default_runtime.yaml
+  - ../models/herbs_swin_tiny.yaml
+  - ../datasets/cassava.yaml
+
+run:
+  name: cassava_herbs_swin_tiny
+  output_dir: ./work_dirs/cassava_herbs_swin_tiny
+
+model:
+  backbone:
+    input_size: [224, 224]
+
+data:
+  train:
+    loader:
+      batch_size: 8
+  val:
+    loader:
+      batch_size: 16
+
+eval:
+  eval_freq: 500
+  metrics:
+    - Accuracy
+  save_best: Accuracy
+  save_final: true

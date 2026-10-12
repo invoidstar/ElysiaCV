@@ -1,0 +1,33 @@
+# HERBS + Swin-Tiny — lightweight FGVC (~29M+neck).
+# Good for rapid experimentation before scaling to Swin-Base.
+
+model:
+  type: cassava_herbs_swin_tiny
+  pretrained_path: null
+  backbone:
+    type: SwinTransformer
+    variant: swin_tiny
+    pretrained: true
+    features_only: true
+  neck:
+    type: HERBSNeck
+    num_classes: 5
+    fpn_size: 384
+
+optim:
+  type: AdamW
+  params:
+    lr: 0.0001
+    weight_decay: 0.05
+
+schedule:
+  type: CosineAnnealing
+  steps: 16050
+  base_lr: 0.0001
+  min_lr: 0.000001
+  warmup_steps: 500
+
+engine:
+  optimization:
+    gradient_accumulation_steps: 1
+    grad_clip_norm: 1.0

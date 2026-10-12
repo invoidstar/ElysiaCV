@@ -1,0 +1,34 @@
+# HERBS + Swin-Base@384 — FGVC state-of-the-art for fine-grained classification.
+# HERBS = High-temperaturE Refinement and Background Suppression.
+# Neck outputs logits directly (no separate head needed).
+
+model:
+  type: cassava_herbs_swin_base
+  pretrained_path: null
+  backbone:
+    type: SwinTransformer
+    variant: swin_base_384
+    pretrained: true
+    features_only: true
+  neck:
+    type: HERBSNeck
+    num_classes: 5
+    fpn_size: 512
+
+optim:
+  type: AdamW
+  params:
+    lr: 0.00003
+    weight_decay: 0.05
+
+schedule:
+  type: CosineAnnealing
+  steps: 16050
+  base_lr: 0.00003
+  min_lr: 0.000001
+  warmup_steps: 500
+
+engine:
+  optimization:
+    gradient_accumulation_steps: 4
+    grad_clip_norm: 1.0

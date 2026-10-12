@@ -1,0 +1,24 @@
+# HERBS + Swin-Base@384 fine-grained classification experiment
+_base_:
+  - ../_base_/default_runtime.yaml
+  - ../models/herbs_swin_base.yaml
+  - ../datasets/cassava.yaml
+
+run:
+  name: cassava_herbs_swin_base
+  output_dir: ./work_dirs/cassava_herbs_swin_base
+
+data:
+  train:
+    loader:
+      batch_size: 4
+  val:
+    loader:
+      batch_size: 8
+
+eval:
+  eval_freq: 500
+  metrics:
+    - Accuracy
+  save_best: Accuracy
+  save_final: true

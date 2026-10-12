@@ -115,6 +115,36 @@ def get_model_plugin() -> SimpleModelPlugin:
                     "description": "ViT-Large/16 — 307M params, patch=16",
                 },
             ),
+            # ── FGVC (Fine-Grained) family ──────────────────────────
+            ModelSpec(
+                name="cassava_herbs_swin_base",
+                task_type="classification",
+                backbone="SwinTransformer",
+                neck="HERBSNeck",
+                input_size=(384, 384),
+                extra={
+                    "num_classes": 5,
+                    "backbone_variant": "swin_base_384",
+                    "backbone_features_only": True,
+                    "neck_fpn_size": 512,
+                    "description": "HERBS (Swin-Base@384) — FGVC SOTA. 88M+neck params."
+                    " High-temp refinement + background suppression.",
+                },
+            ),
+            ModelSpec(
+                name="cassava_herbs_swin_tiny",
+                task_type="classification",
+                backbone="SwinTransformer",
+                neck="HERBSNeck",
+                input_size=(224, 224),
+                extra={
+                    "num_classes": 5,
+                    "backbone_variant": "swin_tiny",
+                    "backbone_features_only": True,
+                    "neck_fpn_size": 384,
+                    "description": "HERBS (Swin-Tiny) — lightweight FGVC. ~29M+neck params.",
+                },
+            ),
         ],
     )
 

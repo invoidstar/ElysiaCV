@@ -1,6 +1,7 @@
 """Cassava Leaf Disease runtime — build / train / test bridge.
 
 Fine-grained classification with FocalLoss for class imbalance.
+Supports both standard models (Backbone→Head) and FGVC models (Backbone→HERBSNeck).
 """
 
 from __future__ import annotations
@@ -11,25 +12,42 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from elysia_cv.core.registry import BACKBONES, HEADS, LOSSES
+from elysia_cv.core.registry import BACKBONES, HEADS, NECKS, LOSSES
 
 
 def build_model(cfg: dict[str, Any]) -> nn.Module:
     """Build cassava classification model from config.
 
-    Layout: Backbone (ResNet) → Head (LinearClsHead)
+    Two layouts are supported:
+
+    - **Standard**: Backbone → Head
+    - **FGVC**:      Backbone → HERBSNeck (neck outputs logits directly)
+
+    Parameters
+    ----------
+    cfg : dict
+        Config dict with possible keys: ``model`` (top-level wrapper)
+        or direct model parameters.
     """
-    model_cfg = cfg.get("model", cfg)
+    # Accept both {"model": {...}} wrapper and direct model config
+    model_cfg: dict[str, Any] = cfg.get("model", cfg) if isinstance(cfg, dict) else cfg
 
     backbone_cfg = dict(model_cfg.get("backbone", {}))
     backbone_type = backbone_cfg.pop("type", "ResNet")
     backbone = BACKBONES.build({"type": backbone_type, **backbone_cfg})
 
-    head_cfg = dict(model_cfg.get("head", {}))
-    head_type = head_cfg.pop("type", "LinearClsHead")
-    head = HEADS.build({"type": head_type, **head_cfg})
-
-    model = CassavaModel(backbone=backbone, head=head)
+    neck_cfg = model_cfg.get("neck")
+    if neck_cfg:
+        # ── FGVC path: Backbone → Neck (logits directly, no head)
+        neck_type = neck_cfg.pop("type", "HERBSNeck")
+        neck = NECKS.build({"type": neck_type, **neck_cfg})
+        model = CassavaModel(backbone=backbone, neck=neck, head=None)
+    else:
+        # ── Standard path: Backbone → Head
+        head_cfg = dict(model_cfg.get("head", {}))
+        head_type = head_cfg.pop("type", "LinearClsHead")
+        head = HEADS.build({"type": head_type, **head_cfg})
+        model = CassavaModel(backbone=backbone, neck=None, head=head)
 
     pretrained = model_cfg.get("pretrained_path")
     if pretrained:
@@ -40,36 +58,44 @@ def build_model(cfg: dict[str, Any]) -> nn.Module:
 
 
 class CassavaModel(nn.Module):
-    """Simple backbone + head for fine-grained classification.
+    """Backbone + (optional neck) + (optional head) for fine-grained classification.
 
     Supports two forward modes:
 
     - **Inference**: ``model(x)`` → ``{"logits": Tensor}``
     - **Training**: ``model(x, gt_label=labels)`` → ``{"loss": Tensor, "logits": Tensor,
       "losses": {"focal": Tensor}, "metrics": {"acc": Tensor}}``
-
-    The training mode is designed to work directly with
-    :class:`TrainerLoop._forward`, which unpacks non-input batch keys as kwargs.
     """
 
-    def __init__(self, backbone: nn.Module, head: nn.Module) -> None:
+    def __init__(
+        self,
+        backbone: nn.Module,
+        neck: nn.Module | None = None,
+        head: nn.Module | None = None,
+    ) -> None:
         super().__init__()
         self.backbone = backbone
+        self.neck = neck
         self.head = head
         self._loss_cfg: dict[str, Any] = {"type": "FocalLoss", "alpha": 0.25, "gamma": 2.0}
 
     def forward(self, x: torch.Tensor, gt_label: torch.Tensor | None = None) -> dict[str, torch.Tensor]:
         feats = self.backbone(x)
-        head_out = self.head(feats)
 
-        # Normalize: head may return tensor or {"logits": tensor}
-        if isinstance(head_out, dict):
-            logits = head_out["logits"]
+        if self.neck is not None:
+            # FGVC path: neck outputs logits directly
+            logits = self.neck(feats)
+        elif self.head is not None:
+            head_out = self.head(feats)
+            if isinstance(head_out, dict):
+                logits = head_out["logits"]
+            else:
+                logits = head_out
         else:
-            logits = head_out
+            raise RuntimeError("CassavaModel: neither neck nor head is configured.")
 
         if gt_label is not None:
-            # ── Training path (TrainerLoop._forward calls model(x, gt_label=labels))
+            # ── Training path
             loss_fn = LOSSES.build(self._loss_cfg)
             loss = loss_fn(logits, gt_label)
             pred = logits.argmax(dim=1)
@@ -81,7 +107,7 @@ class CassavaModel(nn.Module):
                 "metrics": {"acc": acc.detach()},
             }
 
-        # ── Inference path (EvalHook / forward_test)
+        # ── Inference path
         return {"logits": logits}
 
 

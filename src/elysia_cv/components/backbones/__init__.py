@@ -9,3 +9,4 @@ from elysia_cv.components.backbones.resnet import ResNet  # noqa: F401
 from elysia_cv.components.backbones.mlp import MLP  # noqa: F401
 from elysia_cv.components.backbones.simple_cnn import SimpleCNN  # noqa: F401
 from elysia_cv.components.backbones.vit import ViT  # noqa: F401
+from elysia_cv.components.backbones.swin import SwinTransformer  # noqa: F401

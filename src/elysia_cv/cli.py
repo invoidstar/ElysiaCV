@@ -150,13 +150,21 @@ def _make_build_model_fn(cfg: Any):
     from elysia_cv.models.classification.cassava.runtime import build_model
 
     def _build():
-        model_cfg = {
+        model_cfg: dict = {
             "model": {
                 "type": cfg.model.type,
                 "backbone": dict(cfg.model.backbone),
-                "head": dict(cfg.model.head),
             }
         }
+        # Optional neck (FGVC models like HERBS)
+        neck = getattr(cfg.model, "neck", None)
+        if neck is not None:
+            model_cfg["model"]["neck"] = dict(neck)
+        # Optional head (standard models)
+        head = getattr(cfg.model, "head", None)
+        if head is not None:
+            model_cfg["model"]["head"] = dict(head)
+        # Optional pretrained path
         pretrained = getattr(cfg.model, "pretrained_path", None)
         if pretrained:
             model_cfg["model"]["pretrained_path"] = pretrained
@@ -182,7 +190,9 @@ def _make_build_loader_fn(cfg: Any, split: str):
             if isinstance(img_size, (list, tuple)):
                 img_size = img_size[0] if img_size[0] == img_size[1] else 64
         else:
-            img_size = 448
+            img_size = bb_cfg.get("input_size", [448, 448])
+            if isinstance(img_size, (list, tuple)):
+                img_size = img_size[0] if img_size[0] == img_size[1] else 448
 
         if split == "train":
             transform = T.Compose([
@@ -224,13 +234,19 @@ def _print_training_header(cfg: Any) -> None:
 
     # Quick param count (CPU, no grad)
     try:
-        model = build_model({
+        model_dict: dict = {
             "model": {
                 "type": cfg.model.type,
                 "backbone": dict(cfg.model.backbone),
-                "head": dict(cfg.model.head),
             }
-        })
+        }
+        neck = getattr(cfg.model, "neck", None)
+        if neck is not None:
+            model_dict["model"]["neck"] = dict(neck)
+        head = getattr(cfg.model, "head", None)
+        if head is not None:
+            model_dict["model"]["head"] = dict(head)
+        model = build_model(model_dict)
         total_params = sum(p.numel() for p in model.parameters())
         del model
     except Exception:
