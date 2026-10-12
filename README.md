@@ -1,206 +1,247 @@
-# ElysiaCV
+<a id="top"></a>
 
-**统一计算机视觉训练框架**
+<div align="center">
+  <picture>
+    <source media="(max-width: 650px)" srcset="docs/assets/readme/hero-mobile.svg" />
+    <img src="docs/assets/readme/hero.svg" width="100%" alt="ElysiaCV 概念插画：统一视觉研究框架，覆盖图像分类、目标检测与语义分割；插画不代表实际模型预测结果。" />
+  </picture>
 
-ElysiaCV 是一个面向计算机视觉研究的中长期工程基础设施，不是单一模型代码库。
-它为**分类、检测、分割**任务提供统一的配置系统、数据处理流水线、训练引擎和模型插件协议。
+  <h3>让视觉研究聚焦模型，让工程基础设施持续复用。</h3>
+  <p>面向 Classification、Detection 与 Segmentation 的模块化研究框架，统一配置、模型插件、共享组件与训练生命周期。</p>
+
+  <p>
+    <a href="pyproject.toml"><img src="docs/assets/readme/badge-python.svg" height="28" alt="Python 3.10+" /></a>
+    <a href="pyproject.toml"><img src="docs/assets/readme/badge-pytorch.svg" height="28" alt="Backend PyTorch" /></a>
+    <a href="docs/status/current.md"><img src="docs/assets/readme/badge-version.svg" height="28" alt="Version 0.1.0 Alpha" /></a>
+    <a href="LICENSE"><img src="docs/assets/readme/badge-license.svg" height="28" alt="Apache-2.0 License" /></a>
+  </p>
+
+  <p>
+    <a href="#overview">项目概览</a> ·
+    <a href="#vision-tasks">视觉任务</a> ·
+    <a href="#architecture">系统架构</a> ·
+    <a href="#quick-start">快速开始</a> ·
+    <a href="#models">模型与组件</a> ·
+    <a href="#roadmap">开发路线</a> ·
+    <a href="#docs">文档导航</a>
+  </p>
+</div>
 
 ---
 
-## 设计原则
+<a id="overview"></a>
+## One foundation. Many vision experiments.
 
-| 原则 | 说明 |
-|------|------|
-| **多模型复用** | 所有模型以插件形式共存，通过自动发现注册，不修改核心代码 |
-| **注册式零件** | Backbone / Neck / Head / Loss / Metric 通过统一 Registry 组装 |
-| **统一训练流程** | 一套 TrainerLoop 驱动所有任务（分类/检测/分割），差异化只在 Runtime |
-| **配置即代码** | YAML + `_base_` 继承 + CLI override，所有参数可追溯 |
-| **可扩展性** | 新增模型只需创建 `plugin.py` + `runtime.py`，零框架改动 |
+**ElysiaCV 是面向计算机视觉研究的长期工程基础设施，而不是单一模型的训练脚本合集。** 它希望让不同的视觉任务共享清晰的配置合同、可复用的组件和统一的训练机制；模型自身的结构、损失函数和任务语义则由各自的插件实现。
 
----
+项目借鉴了 [ElysiaRobot](https://github.com/invoidstar/ElysiaRobot) 的模块化与训练工程经验，但 ElysiaCV 关注的是通用计算机视觉任务，而非 VLA 的动作预测与仿真环境。
 
-## 项目结构
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <h3>01 · 插件式模型</h3>
+      <p>模型以独立目录管理，通过 <code>plugin.py</code> 声明身份，使用 <code>runtime.py</code> 封装任务逻辑。</p>
+    </td>
+    <td width="33%" valign="top">
+      <h3>02 · 可组装组件</h3>
+      <p>共享 Backbone、Neck、Head、Loss 和 Metric，减少实验之间的重复实现。</p>
+    </td>
+    <td width="33%" valign="top">
+      <h3>03 · 配置驱动</h3>
+      <p>YAML、<code>_base_</code> 继承、环境变量与命令行覆盖，帮助维护可追溯的实验配置。</p>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h3>04 · 统一训练内核</h3>
+      <p>复用训练循环、优化器、调度器、梯度累积、分布式策略与回调机制。</p>
+    </td>
+    <td valign="top">
+      <h3>05 · 实验生命周期</h3>
+      <p>围绕 TrainingPlan、日志、Checkpoint 和指标收集组织运行过程。</p>
+    </td>
+    <td valign="top">
+      <h3>06 · 可持续扩展</h3>
+      <p>优先扩展任务插件与数据适配，不为每一种模型重新维护一套训练框架。</p>
+    </td>
+  </tr>
+</table>
 
+> **当前阶段：v0.1.0 · Alpha / 工程原型。** 仓库已经包含模型插件、配置与训练模块，以及分类、检测和分割的示例实现；但当前 `main` 分支仍缺少 `src/elysia_cv/data/` 数据包，统一 CLI、真实数据加载和部分评测环节尚未完成闭环。**存在模块实现不等于对应任务已经完成真实数据端到端训练。** 详细核对见 [当前工程状态](docs/status/current.md)。
+
+<a id="vision-tasks"></a>
+## Vision tasks · 从图像理解到像素级预测
+
+<img src="docs/assets/readme/tasks.svg" width="100%" alt="图像分类、目标检测、语义分割的概念示意图；非真实数据样例，也不是模型输出。" />
+
+| 任务 | 研究目标 | 当前示例 |
+| --- | --- | --- |
+| **Image Classification** | 将输入图像映射为类别，用于分类基线与模型架构对比。 | ResNet 系列；Cassava 的 MLP、SimpleCNN、ResNet、ViT 配置与 Runtime。 |
+| **Object Detection** | 通过多尺度特征预测目标类别与候选区域。 | ResNet + FPN + DetHead 的检测结构演示；尚非完整的 Faster R-CNN 训练实现。 |
+| **Semantic Segmentation** | 为图像中的像素预测语义类别。 | ResNet + IdentityNeck + SegHead，以及 CE / Dice 相关训练前向。 |
+
+三条任务共用研究基础设施的设计方向，但**模型实现、数据接入、有效指标与完整训练闭环仍需分别验证**。上方配图是原创概念图，不代表实验结果。
+
+<a id="architecture"></a>
+## Architecture · 清晰的核心合同与插件边界
+
+<picture>
+  <source media="(max-width: 650px)" srcset="docs/assets/readme/architecture-mobile.svg" />
+  <img src="docs/assets/readme/architecture.svg" width="100%" alt="ElysiaCV 架构：YAML 与配置计划进入训练引擎，插件、注册组件和数据适配分别提供任务实现。图中明确标注数据接入当前尚未完成。" />
+</picture>
+
+| 层级 | 职责 | 主要位置 |
+| --- | --- | --- |
+| **Config & Plan** | 配置继承、类型化解析、运行参数编译与校验。 | [`config/`](src/elysia_cv/config/) · [`training/plan.py`](src/elysia_cv/training/plan.py) |
+| **Model Plugins** | 声明模型规格，构建模型并定义专属训练 / 测试前向。 | [`models/`](src/elysia_cv/models/) |
+| **Component Registry** | 注册与组装可复用模型零件、损失函数和评测指标。 | [`core/registry.py`](src/elysia_cv/core/registry.py) · [`components/`](src/elysia_cv/components/) |
+| **Training Engine** | 组织训练循环、分布式执行、调度、Hook 与 Checkpoint。 | [`training/`](src/elysia_cv/training/) |
+| **Data Adapters** | 目标接口为 Dataset、Loader、Transforms 和 Sampler；当前主分支待接通。 | [工程状态](docs/status/current.md) |
+
+**模型插件**负责“如何构建模型、如何定义任务 Loss”；**共享引擎**负责“何时迭代、何时更新权重、何时记录或保存”。这份架构图展示的是职责边界，不是全部模块已经完成串联的保证。更详细的设计见 [架构合同](docs/infrastructure/architecture.md)。
+
+<a id="lifecycle"></a>
+## Experiment lifecycle · 一条可复用的实验主路径
+
+<img src="docs/assets/readme/workflow.svg" width="100%" alt="概念实验流程：配置、模型插件、任务前向、优化器及训练回调、结果制品。当前项目尚需完成数据与多任务的整体集成。" />
+
+配置与模型规范进入训练计划，Task Runtime 负责前向及 Loss，训练循环管理更新策略，Hook 负责日志、评估与 Checkpoint。ElysiaCV 将这几项职责分开，是为了允许模型替换，而不需要重写外围工程。
+
+现有训练实现包含梯度累积、DDP 同步策略、MetricsRuntime 与多种 Hook；它们是**可复用的工程模块**，实际性能与跨任务正确性仍以对应实验验证为准。详见 [性能指南](docs/infrastructure/performance.md)。
+
+<a id="quick-start"></a>
+## Quick start · 从仓库和配置入口开始
+
+### 1. 获取代码并准备环境
+
+```bash
+git clone https://github.com/invoidstar/ElysiaCV.git
+cd ElysiaCV
+
+conda create -n elysia-cv python=3.10 -y
+conda activate elysia-cv
+
+# 请先按本机 CUDA / GPU 环境选择匹配的 PyTorch 版本
+python -m pip install -e .
 ```
+
+仓库要求 **Python 3.10+**，基于 **PyTorch**。上述步骤用于准备项目依赖；由于当前数据模块仍待补齐，**安装完成不表示训练 CLI 已可端到端执行**。
+
+### 2. 浏览现有实验配置与启动参数
+
+```bash
+# 查看启动器选项和可用的 YAML 文件
+bash ./run_experiment.sh --help
+
+# 查看分类示例最终将执行的训练命令（不开始训练）
+bash ./run_experiment.sh configs/classification/cassava_resnet18.yaml --print-command
+```
+
+`--print-command` 只展示命令，不检查 Dataset，也不会开始训练。现阶段建议从 [分类配置](configs/classification/) 和 [配置指南](docs/guides/config.md) 了解项目约定，再结合 [当前状态](docs/status/current.md) 判断可运行范围。
+
+### 3. 训练、测试与推理入口（持续完善）
+
+| 入口 | 设计用途 | 当前边界 |
+| --- | --- | --- |
+| `run_experiment.sh` / `tools/train.py` | 通过 YAML 启动训练。 | CLI 训练路径仍偏向 Cassava 分类，依赖缺失的数据包，尚未统一适配三类任务。 |
+| `tools/test.py` | 加载模型与 Checkpoint，执行评测。 | 对应 CLI 目前为占位实现。 |
+| `tools/infer.py` | 单张图像或目录推理。 | 对应 CLI 目前为占位实现。 |
+| `tests/` | 检查配置、插件、组件和训练逻辑。 | 已有测试源码；尚未确认当前 `main` 可以完整运行整个测试集。 |
+
+因此，README 不把 ImageNet、COCO 或 ADE20K 的 YAML **示例配置**描述为已经复现的性能结果，也不提供未验证的训练准确率或加速数字。
+
+<a id="models"></a>
+## Models & components · 可复用而不强制同构
+
+### Model plugin catalog
+
+| Plugin | 任务 | 已有规格或组件 |
+| --- | --- | --- |
+| [`resnet`](src/elysia_cv/models/classification/resnet/) | Classification | ResNet-18 / 34 / 50 / 101 |
+| [`cassava`](src/elysia_cv/models/classification/cassava/) | Classification | MLP、SimpleCNN、ResNet-18 / 34 / 50、ViT-B/16、ViT-L/16 |
+| [`faster_rcnn`](src/elysia_cv/models/detection/faster_rcnn/) | Detection | ResNet + FPN + DetHead（代理损失 / 结构演示） |
+| [`fcn`](src/elysia_cv/models/segmentation/fcn/) | Segmentation | ResNet-50 / 101 + SegHead |
+
+上表描述的是**仓库中已有的声明和模型实现**，而非经过相同训练协议认证的 Benchmark 成绩。其中检测 Runtime 使用随机伪标签和随机框目标演示 Loss 数据流；`MeanAP` 也是近似占位指标，不能当作 COCO 标准 mAP。
+
+### Shared building blocks
+
+| 模块 | 代表性实现 |
+| --- | --- |
+| **Backbones** | MLP · SimpleCNN · ResNet · ViT |
+| **Necks & Heads** | FPN · IdentityNeck · LinearClsHead · ClsHead · DetHead · SegHead |
+| **Losses & Metrics** | CrossEntropy · Focal · SmoothL1 · IoU / GIoU · Dice · Accuracy · MeanIoU |
+| **Optimization** | Optimizer / Scheduler builders · Gradient accumulation · DDP execution strategy |
+| **Training Hooks** | Logger · Checkpoint · Evaluation · LR Scheduler |
+
+完整的插件发现、模型接口及扩展步骤见 [扩展指南](docs/guides/extension.md)。新增模型原则上只需提供自己的 `plugin.py` 与 `runtime.py`；共享数据与执行环境的兼容性仍应单独验证。
+
+<a id="roadmap"></a>
+## Roadmap · 先完成基础闭环，再扩展模型覆盖
+
+| 阶段 | 重点 |
+| --- | --- |
+| **P0 · Foundation** | 补齐数据包和 Python 导入链路；清理 CLI 中的训练阻塞点，保证最小配置可启动。 |
+| **P1 · Unified training** | 将 Model Runtime 与统一训练入口接通，为分类、检测和分割建立各自的真实数据闭环。 |
+| **P2 · Evaluation & inference** | 完成 Test / Infer 的可用实现，并用标准任务评测替代占位 Metric。 |
+| **P3 · Model ecosystem** | 在稳定基础设施之上按需要接入更多模型与数据集，避免重复实现 Trainer。 |
+
+路线图是下一阶段的**工程方向**，并不表示这些事项已完成。状态更新以 [`docs/status/current.md`](docs/status/current.md) 为准。
+
+<a id="docs"></a>
+## Documentation · 按问题找到入口
+
+| 想了解什么 | 文档 |
+| --- | --- |
+| 当前实现与待完成事项 | [工程状态](docs/status/current.md) |
+| 如何理解系统边界 | [架构合同](docs/infrastructure/architecture.md) |
+| 如何组织 YAML | [配置指南](docs/guides/config.md) · [配置索引](configs/README.md) |
+| 如何使用训练配置与 Checkpoint | [训练指南](docs/guides/training.md) |
+| 如何增加自己的模型和组件 | [模型扩展指南](docs/guides/extension.md) |
+| 训练性能与分布式设计 | [性能指南](docs/infrastructure/performance.md) |
+
+完整文档导航：[`docs/README.md`](docs/README.md)。
+
+<details>
+<summary><strong>Repository structure · 展开查看项目结构</strong></summary>
+
+```text
 ElysiaCV/
-├── README.md
-├── pyproject.toml                      # Python 项目定义
-│
-├── tools/                              # 统一入口脚本
-│   ├── train.py                        # python tools/train.py config.yaml
-│   ├── test.py                         # python tools/test.py config.yaml resume.pt
-│   └── infer.py                        # python tools/infer.py config.yaml -i img.jpg
-│
-├── configs/                            # 用户配置（YAML + _base_ 继承）
-│   ├── _base_/default_runtime.yaml     # DDP / DataLoader / precision 默认值
-│   ├── classification/resnet50_imagenet.yaml
-│   ├── detection/faster_rcnn_resnet50_coco.yaml
-│   └── segmentation/fcn_resnet50_ade20k.yaml
-│
-├── docs/                               # 完整文档体系
-│   ├── README.md                       # 文档入口
-│   ├── status/                         # 当前状态与路线图
-│   ├── guides/                         # 训练 / 评测 / 配置 / 扩展指南
-│   └── infrastructure/                 # 架构合同
-│
-├── src/elysia_cv/                      # 核心 Python 包
-│   ├── core/                           # Plugin 协议、Registry、异常体系
-│   ├── config/                         # 配置系统（loader / override / validation）
-│   ├── data/                           # 数据流水线（Dataset / Dataloader / Transforms）
-│   ├── models/                         # 模型插件（classification / detection / segmentation）
-│   ├── components/                     # 共享零件（backbones / necks / heads）
-│   ├── losses/                         # 注册式 Loss 函数
-│   ├── metrics/                        # 注册式 Metric
-│   ├── training/                       # 训练引擎（Engine / Loop / Hooks / Distributed）
-│   ├── optim/                          # 优化器 / 调度器
-│   └── utils/                          # 通用工具
-│
-└── tests/                              # 80 个单元 + 端到端测试
+├── configs/                  # 分类 / 检测 / 分割 YAML
+├── docs/                     # 指南、架构、状态、README 插画
+│   └── assets/readme/        # 本地 SVG 图形资源
+├── src/elysia_cv/
+│   ├── core/                 # Plugin、Registry 与 API 合同
+│   ├── config/               # YAML 解析、校验与配置对象
+│   ├── models/               # 各任务模型插件与 Runtime
+│   ├── components/           # Backbone / Neck / Head
+│   ├── losses/               # 注册式 Loss
+│   ├── metrics/              # 注册式 Metric
+│   ├── training/             # Engine、Loop、Hooks、DDP
+│   ├── optim/                # Optimizer 与 Scheduler
+│   └── utils/                # 通用工具
+├── tools/                    # Train / Test / Infer CLI 包装入口
+├── scripts/                  # 实验辅助脚本
+├── tests/                    # 配置、组件、模型与训练测试
+├── run_experiment.sh         # Shell 启动器
+└── pyproject.toml            # 依赖、打包与 CLI 声明
+
+# 当前 main 尚缺少 src/elysia_cv/data/。
 ```
+
+</details>
+
+## Contributing & license
+
+欢迎通过 [Issues](https://github.com/invoidstar/ElysiaCV/issues) 反馈问题、讨论新模型和提交改进。建议新增功能前先阅读 [架构合同](docs/infrastructure/architecture.md) 与 [扩展指南](docs/guides/extension.md)，保持插件、共享组件和训练内核的职责边界清晰。
+
+本项目代码采用 [Apache License 2.0](LICENSE)。第三方模型、权重与数据集遵循各自的使用和分发条款。
 
 ---
 
-## 快速开始
-
-### 环境要求
-
-```bash
-conda create -n CV python=3.10 -y
-conda activate CV
-pip install torch torchvision
-pip install -e .           # ElysiaCV editable install
-```
-
-### 训练
-
-```bash
-# 分类
-python tools/train.py configs/classification/resnet50_imagenet.yaml
-
-# 检测
-python tools/train.py configs/detection/faster_rcnn_resnet50_coco.yaml \
-    --set data.train.dataset_root=/path/to/coco optim.params.lr=0.01
-
-# 分割
-python tools/train.py configs/segmentation/fcn_resnet50_ade20k.yaml \
-    --set data.train.dataset_root=/path/to/ade20k
-```
-
-### 测试
-
-```bash
-python tools/test.py configs/classification/resnet50_imagenet.yaml \
-    ./work_dirs/checkpoint_final.pt
-```
-
-### 推理
-
-```bash
-python tools/infer.py configs/classification/resnet50_imagenet.yaml \
-    checkpoints/best_Accuracy.pt -i img.jpg -o result.json
-```
-
----
-
-## 核心概念
-
-### Model Plugin 三层架构
-
-```
-┌─────────────────────────────────────────────┐
-│  plugin.py                                  │
-│  MODEL_PLUGIN = SimpleModelPlugin(...)       │  ← 元数据（姓名/任务/规格）
-│  自动发现，无需注册中心                       │
-├─────────────────────────────────────────────┤
-│  runtime.py                                 │
-│  build_model(cfg) → nn.Module               │  ← 构建 + 训练/测试循环
-│  forward_train(model, batch) → loss_dict    │
-│  forward_test(model, batch) → pred_dict     │
-├─────────────────────────────────────────────┤
-│  自由目录                                    │
-│  modeling.py / backbone.py / ...            │  ← 内部实现，无框架约束
-└─────────────────────────────────────────────┘
-```
-
-### Registry 体系
-
-| Registry | 用途 | 已注册 |
-|----------|------|--------|
-| `BACKBONES` | 视觉骨干网络 | ResNet |
-| `NECKS` | 特征融合层 | FPN, IdentityNeck |
-| `HEADS` | 任务输出头 | LinearClsHead, ClsHead, DetHead, SegHead |
-| `LOSSES` | 损失函数 | CrossEntropy, Focal, SmoothL1, IoU, GIoU, Dice, Combined |
-| `METRICS` | 评测指标 | Accuracy, Top5, MeanIoU, MeanAccuracy, MeanAP |
-| `TRANSFORMS` | 数据增强 | Resize, RandomFlip, Normalize 等 13 种 |
-| `HOOKS` | 训练回调 | Checkpoint, Logger, LrScheduler, Eval |
-
-### 训练引擎架构
-
-```
-TrainingEngine
-  ├── Config → TrainingPlan        (YAML + _base_ + override → 不可变计划)
-  ├── ModelPlugin.discover()       (自动发现所有模型插件)
-  ├── DataLoader + Transforms      (注册式 Pipeline)
-  └── TrainerLoop
-         ├── ExecutionStrategy      (梯度累积 + DDP no_sync)
-         ├── HookBus                (Checkpoint / Logger / Eval / Scheduler)
-         └── MetricsRuntime         (设备端累积 + 边界 all-reduce)
-```
-
----
-
-## 从 ElysiaRobot 继承的验证经验
-
-ElysiaCV 的训练引擎基于 [ElysiaRobot](https://github.com/ElysiaRobot) 的 `native_engine.py` 简化重构，继承了以下 12 条已验证的性能优化：
-
-- **DDP**: `bucket_cap_mb=64`, `gradient_as_bucket_view=true`, `broadcast_buffers=false`
-- **梯度累积**: 仅最后 micro-step 同步梯度 + optimizer step
-- **指标优化**: 设备端累积，log 边界批量 all-reduce（避免 400+ 次通信）
-- **DataLoader**: `spawn` 线程防止 CUDA fork 死锁, `prefetch_factor=2`
-- **CUDA**: `cudnn.benchmark=true`, `allow_tf32=true`, `zero_grad(set_to_none=true)`
-
-详见 `docs/infrastructure/performance.md`。
-
----
-
-## 扩展模型
-
-```bash
-# 创建新模型目录
-mkdir -p src/elysia_cv/models/detection/retinanet
-
-# plugin.py — 声明身份
-cat > src/elysia_cv/models/detection/retinanet/plugin.py << 'EOF'
-from elysia_cv.core.plugin import SimpleModelPlugin
-from elysia_cv.models.contract import ModelSpec
-
-MODEL_PLUGIN = SimpleModelPlugin(
-    name="retinanet",
-    task_type="detection",
-    model_specs=[ModelSpec(name="retinanet_r50", ...)],
-)
-EOF
-
-# runtime.py — 实现 build / train / test
-cat > src/elysia_cv/models/detection/retinanet/runtime.py << 'EOF'
-def build_model(cfg): ...
-def forward_train(model, batch, *, device=None): ...
-def forward_test(model, batch, *, device=None): ...
-EOF
-```
-
-新增后无需修改任何框架代码，`MODEL_PLUGIN` 会被自动发现。
-
----
-
-## 测试
-
-```bash
-pytest tests/ -v    # 80 个测试, ~30s
-```
-
----
-
-## License
-
-Apache-2.0 — 详见 `LICENSE` 文件。
+<div align="center">
+  <img src="docs/assets/readme/logo.svg" width="52" height="52" alt="ElysiaCV 项目图标" /><br />
+  <strong>ElysiaCV</strong><br />
+  <sub>One foundation. More room for vision ideas.</sub><br /><br />
+  <a href="#top">返回顶部 ↑</a> · <a href="docs/README.md">阅读文档</a> · <a href="docs/status/current.md">查看进展</a>
+</div>
