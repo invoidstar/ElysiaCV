@@ -1,146 +1,86 @@
 # AGENTS.md — ElysiaCV
 
-> AI agents and contributors: read this first before modifying the codebase.
-> Last updated: 2026-10-12
+> AI agent 和贡献者：在修改代码之前，请先阅读本文档。
+> 最后更新：2026-10-12
 
 ---
 
-## 1. What is ElysiaCV?
+## 1. 项目概览
 
-A unified training framework for computer vision (classification, detection, segmentation).
-The guiding principle: **"Focus on models, reuse engineering."**
+ElysiaCV 是一个面向计算机视觉（分类、检测、分割）的统一训练框架。
+核心理念：**"让视觉研究聚焦模型，让工程基础设施持续复用"**。
 
-- **Config-driven**: everything flows from YAML configs (MMDetection-style `_base_` inheritance)
-- **Plugin architecture**: models register themselves via decorators, no central registry file
-- **Component library**: shared backbones, necks, heads, losses, metrics — mix and match
-- **Training engine**: TrainerLoop + HookBus (checkpoint, logging, evaluation), DDP-ready
+**原则**：
+- **配置驱动**：一切从 YAML 配置出发（MMDetection 式的 `_base_` 继承）
+- **插件式架构**：模型通过装饰器自注册，无需集中注册文件
+- **组件库**：共享的 Backbone、Neck、Head、Loss、Metric
+- **训练引擎**：TrainerLoop + HookBus（checkpoint/log/evaluation），支持 DDP
 
-**Version**: v0.1.0 Alpha | **Python**: ≥3.10 | **PyTorch**: ≥2.0
+**版本**：v0.1.0 Alpha | **Python**：≥3.10 | **PyTorch**：≥2.0
 
 ---
 
-## 2. Project Layout
+## 2. 项目结构
 
 ```
 ElysiaCV/
-├── configs/                          # ⬅️ START HERE for experiments
-│   ├── _base_/default_runtime.yaml   #    engine, tracking, dataloader defaults
-│   ├── models/                       #    pure model definitions (arch + optim + schedule)
-│   │   ├── mlp.yaml                  #    MLP: 64×64, AdamW
-│   │   ├── simple_cnn.yaml           #    5-stage plain CNN, SGD
-│   │   ├── resnet{18,34,50}.yaml     #    ResNet, SGD
-│   │   └── vit_{b16,l16}.yaml        #    ViT, AdamW + grad_clip
-│   ├── datasets/                     #    pure dataset definitions (data section only)
-│   │   └── cassava.yaml              #    Cassava leaf disease (5 classes, 17k imgs)
-│   └── experiments/                  #    composition: model + dataset + overrides
-│       └── cassava_{model}.yaml      #    _base_: [../_base_/runtime, ../models/X, ../datasets/cassava]
+├── configs/                          # ⬅️ 实验从这里开始
+│   ├── _base_/default_runtime.yaml   #    引擎、tracking、dataloader 全局默认值
+│   ├── models/                       #    纯模型定义（架构 + 优化器 + 学习率调度）
+│   ├── datasets/                     #    纯数据集定义（仅 data 段）
+│   └── experiments/                  #    组合 = model + dataset + 覆盖项
 │
-├── src/elysia_cv/                    # Python package
-│   ├── core/                         # 0-dependency foundation
-│   │   ├── registry.py              #    REGISTRY = Registry("...") + @REGISTRY.register_module()
-│   │   ├── plugin.py                #    PluginBase (model contract)
-│   │   ├── api_version.py           #    CORE_API_VERSION = "1.0"
-│   │   ├── errors.py                #    Custom error types
-│   │   ├── capabilities.py          #    Capability enum
-│   │   └── readiness.py             #    Health check
-│   ├── config/                       # Config loading & validation
-│   │   ├── loader.py                #    load_cv_config() — YAML + _base_ + env expansion
-│   │   ├── config.py                #    CVConfig dataclass
-│   │   ├── sections.py              #    Dataclass sections (Run, Model, Data, Engine, etc.)
-│   │   └── validation.py            #    Config schema validation
-│   ├── models/                       # Task-specific model plugins
-│   │   ├── contract.py              #    Abstract ModelPlugin contract
-│   │   ├── registry.py              #    MODEL_REGISTRY
-│   │   └── classification/cassava/  #    Cassava disease classification
-│   │       ├── plugin.py            #    @register_model decorator entry
-│   │       └── runtime.py           #    build_model(), forward_train(), forward_test()
-│   ├── components/                   # Shared building blocks (Registry-registered)
-│   │   ├── backbones/               #    ResNet, ViT, MLP, SimpleCNN
-│   │   ├── necks/                   #    FPN, IdentityNeck
-│   │   └── heads/                   #    LinearClsHead, DetHead, SegHead
-│   ├── training/                     # Training infrastructure
-│   │   ├── loop.py                  #    TrainerLoop — main training orchestrator
-│   │   ├── engine.py                #    TrainingEngine — step-level logic
-│   │   ├── plan.py                  #    TrainingPlan — pre-flight validation
-│   │   ├── strategy.py              #    ExecutionStrategy (grad_accum, grad_clip)
-│   │   ├── distributed.py           #    DDP, FSDP support
-│   │   └── hooks/                   #    Hook system (base, checkpoint, logger, evaluation, lr_scheduler)
-│   ├── data/                         # Data loading (currently used by CLI, not TrainerLoop)
-│   │   ├── cassava_dataset.py       #    CassavaDataset (torch Dataset)
-│   │   ├── dataset.py               #    Base dataset abstraction
-│   │   ├── dataloader.py            #    Dataloader builder
-│   │   └── transforms/              #    Augmentation, normalization, formatting
-│   ├── losses/                       # Loss functions (FocalLoss, CrossEntropy, Dice, SmoothL1)
-│   ├── metrics/                      # Metrics (Accuracy, TopK, IoU, MeanAP placeholder)
-│   ├── optim/                        # Optimizer & scheduler builders
-│   ├── cli.py                        # CLI entry: `elysia train|test|infer|models`
-│   └── __init__.py                   # Auto-registers all components on import
+├── src/elysia_cv/                    # Python 包
+│   ├── core/                         # 零依赖基础设施
+│   ├── config/                       # 配置加载与校验
+│   ├── models/                       # 任务级模型插件
+│   ├── components/                   # 共享组件（通过 Registry 注册）
+│   ├── training/                     # 训练基础设施
+│   ├── data/                         # 数据加载
+│   ├── losses/                       # 损失函数
+│   ├── metrics/                      # 评估指标
+│   └── optim/                        # 优化器与调度器构建器
 │
-├── tools/                            # Standalone scripts
-│   ├── train.py                      #   `python tools/train.py <config> [--set ...]`
-│   ├── analyze.py                    #   Post-training: confusion matrix + GradCAM
-│   ├── test.py                       #   Placeholder
-│   └── infer.py                      #   Placeholder
+├── tools/                            # 独立脚本
+│   ├── train.py                      #   训练入口
+│   └── analyze.py                    #   训练后分析（混淆矩阵 + GradCAM）
 │
-├── scripts/                          # Batch experiment launchers
-│   └── run_cassava_experiments.sh    #   Run all 7 cassava models sequentially
+├── scripts/                          # 批量实验启动脚本
+│   └── run_cassava_experiments.sh    #   按顺序跑全部 7 个 Cassava 模型
 │
-├── tests/                            # pytest — 7 test files, 121+ total tests
-│   ├── test_cassava.py               #   Cassava model building + forward
-│   ├── test_cassava_experiments.py   #   Full 10-step train + config tests
-│   ├── test_config.py                #   Config loading + _base_ inheritance + validation
-│   ├── test_det_seg.py               #   Detection & segmentation model building
-│   ├── test_plugin.py                #   Plugin discovery
-│   ├── test_registry.py              #   Registry register + build
-│   └── test_training.py              #   TrainerLoop, HookBus, distributed
-│
-└── docs/                             # Guides and architecture docs
-    ├── guides/                       #   config.md, training.md, extension.md
-    ├── infrastructure/               #   architecture.md, performance.md
-    └── status/current.md            #   What works, what doesn't (keep updated)
+├── tests/                            # pytest（7 个测试文件）
+├── docs/                             # 指南和架构文档
+└── AGENTS.md                         # ← 你在这里
 ```
 
 ---
 
-## 3. Architecture Principles
+## 3. 核心架构原则
 
-### 3.1 Module Dependency Direction
+### 3.1 模块依赖方向
 
 ```
 core/  ←  config/  ←  data/  ←  models/  ←  training/
   ↓         ↓          ↓         ↓            ↓
-  [ALL modules can import from core/ and config/]
-  
-components/  ←  used by models/ (via Registry, not direct import)
-losses/      ←  used by models/runtime.py
-metrics/     ←  used by training/
-optim/       ←  used by cli.py / training/
+  [所有模块都可以 import core/ 和 config/]
+
+components/  ←  由 models/ 通过 Registry 引用（不直接 import）
+losses/      ←  由 models/*/runtime.py 使用
+metrics/     ←  由 training/ 使用
+optim/       ←  由 cli.py / training/ 使用
 ```
 
-**Rules**:
-- `core/` imports **zero torch code**, zero project code
-- `config/` only imports `core/`
-- `components/` register via `@BACKBONES.register_module()`, never import from `models/`
-- `models/*/runtime.py` owns **forward pass logic** (FocalLoss, accuracy)
-- `training/loop.py` owns **the training loop** (step, backward, optimizer)
-- `cli.py` is the **only entry point** that wires model + data + training together
+**规则**：
+- `core/` 不 import torch 代码，不 import 项目内代码
+- `config/` 只 import `core/`
+- `components/` 通过 `@BACKBONES.register_module()` 注册，绝不 import `models/`
+- `models/*/runtime.py` 负责**前向计算逻辑**
+- `training/loop.py` 负责**训练循环**（step、backward、optimizer）
+- `cli.py` 是**唯一入口**，负责串联 model + data + training
 
-### 3.2 Config Composition Model
+### 3.2 Registry 模式
 
-```
-models/xxx.yaml          datasets/xxx.yaml
-       \                      /
-        \     _base_          /
-         └───→ experiment.yaml ←─── _base_/default_runtime.yaml
-```
-
-- `_base_` supports lists: `_base_: [../a.yaml, ../b.yaml]` — merged left-to-right, child overrides
-- `_deep_merge` recursively merges nested dicts; lists use index-based merge
-- Environment variables: `${VAR}` and `${VAR:-default}` in string values
-
-### 3.3 Registry Pattern
-
-All components are discovered by decorator, never by import:
+所有组件通过装饰器自发现，绝不通过 import 集中列出：
 
 ```python
 from elysia_cv.core.registry import BACKBONES, HEADS, LOSSES
@@ -149,160 +89,131 @@ from elysia_cv.core.registry import BACKBONES, HEADS, LOSSES
 class ResNet(nn.Module):
     ...
 
-# Usage
+# 构建时
 backbone = BACKBONES.build({"type": "ResNet", "depth": 50})
 ```
 
-Registries: `BACKBONES`, `NECKS`, `HEADS`, `LOSSES`, `METRICS`, `TRANSFORMS`, `HOOKS`
+**全局 Registry 列表**：`BACKBONES`、`NECKS`、`HEADS`、`LOSSES`、`METRICS`、`TRANSFORMS`、`HOOKS`
+
+### 3.3 配置组合模型
+
+```
+models/xxx.yaml          datasets/xxx.yaml
+       \                      /
+        \     _base_          /
+         └───→ experiment.yaml ←─── _base_/default_runtime.yaml
+```
+
+- `_base_` 支持列表：`_base_: [../a.yaml, ../b.yaml]`，从左到右合并，子节点覆盖父节点
+- `_deep_merge` 递归合并嵌套 dict；列表按索引合并
+- 环境变量：字符串中支持 `${VAR}` 和 `${VAR:-default}`
 
 ---
 
-## 4. Key Files to Know
+## 4. 常用操作
 
-| File | Purpose | When to edit |
-|------|---------|-------------|
-| `src/elysia_cv/cli.py` | Main training loop (currently direct, not via TrainerLoop) | Add new training features |
-| `src/elysia_cv/config/loader.py` | `_load_yaml_with_base()` — config inheritance | Fix config loading bugs |
-| `src/elysia_cv/models/classification/cassava/runtime.py` | `build_model()` + `forward_train()` | Change Cassava model forward |
-| `src/elysia_cv/training/loop.py` | `TrainerLoop.run()` — full training orchestrator | Fix training loop bugs |
-| `src/elysia_cv/training/hooks/` | HookBus + built-in hooks | Add checkpoint/log/eval hooks |
-| `src/elysia_cv/__init__.py` | Auto-registers all components on import | Add new component modules |
-| `configs/_base_/default_runtime.yaml` | Global defaults (engine, tracking, dataloader) | Change system-wide defaults |
-| `pyproject.toml` | Package metadata, dependencies, lint config | Add new dependencies |
-
----
-
-## 5. Development Workflow
-
-### 5.1 Setup
+### 4.1 环境准备
 
 ```bash
 conda activate CV
 pip install -e ".[dev]"
 ```
 
-### 5.2 Run Tests
+### 4.2 运行测试
 
 ```bash
-# All tests
-pytest tests/ -v
-
-# Specific test
-pytest tests/test_cassava_experiments.py -v
-
-# With GPU (CI-friendly)
-CUDA_VISIBLE_DEVICES=6 pytest tests/ -v
+pytest tests/ -v                          # 全部测试
+pytest tests/test_cassava_experiments.py -v  # 单个测试
+CUDA_VISIBLE_DEVICES=6 pytest tests/ -v   # 指定 GPU
 ```
 
-### 5.3 Lint
+### 4.3 代码检查
 
 ```bash
 ruff check src/ tests/ tools/
 black --check src/ tests/ tools/
 ```
 
-Config: 120-char lines, py310 target, rules `A,B,E,F,I,W`.
+配置：120 字符行宽、py310 目标、规则 `A,B,E,F,I,W`。
 
-### 5.4 Run an Experiment
+### 4.4 运行实验
 
 ```bash
-# Single model
+# 单模型
 python tools/train.py configs/experiments/cassava_resnet50.yaml
 
-# With overrides
-python tools/train.py configs/experiments/cassava_vit_b16.yaml --set schedule.steps=100 optim.params.lr=0.001
+# 带覆盖
+python tools/train.py configs/experiments/cassava_vit_b16.yaml \
+    --set schedule.steps=100 optim.params.lr=0.001
 
-# Full suite
+# 全量对比
 bash scripts/run_cassava_experiments.sh
 ```
 
-### 5.5 Post-Training Analysis
+### 4.5 训练后分析
 
 ```bash
 python tools/analyze.py configs/experiments/cassava_resnet50.yaml \
     --checkpoint work_dirs/cassava_resnet50/checkpoint_best.pt
 ```
 
-Outputs: `analysis/confusion_matrix.png`, `analysis/per_class_report.txt`, `analysis/gradcam/`
+输出：`analysis/confusion_matrix.png`、`analysis/per_class_report.txt`、`analysis/gradcam/`
 
 ---
 
-## 6. Adding a New Model
+## 5. 添加新模块
 
-1. **Create model config**: `configs/models/my_model.yaml`
-   - Define `model`, `optim`, `schedule`, `engine.optimization`
+### 5.1 添加新模型
 
-2. **Create runtime**: `src/elysia_cv/models/classification/my_model/`
-   - `plugin.py` — `@register_model` decorator
-   - `runtime.py` — `build_model()`, `forward_train()`, `forward_test()`
+1. **创建模型配置**：`configs/models/my_model.yaml`
+2. **创建运行时**：`src/elysia_cv/models/classification/my_model/plugin.py` + `runtime.py`
+3. **创建实验配置**：`configs/experiments/my_experiment.yaml`
+4. **注册组件**（如新 backbone）：在 `src/elysia_cv/__init__.py` 中添加 import
+5. **添加测试**：`tests/test_my_model.py`
 
-3. **Create experiment**: `configs/experiments/my_experiment.yaml`
-   - `_base_: [../_base_/default_runtime.yaml, ../models/my_model.yaml, ../datasets/my_data.yaml]`
+### 5.2 添加新数据集
 
-4. **Add components** (if new backbone/head/neck):
-   - Register with `@BACKBONES.register_module()` / `@HEADS.register_module()`
-   - Import module in `src/elysia_cv/__init__.py:_register_default_components()`
-
-5. **Add tests**: `tests/test_my_model.py`
-   - Build test, forward test, 10-step train test
+1. **创建数据集配置**：`configs/datasets/my_data.yaml`
+2. **创建实验**：`_base_: [../models/X.yaml, ../datasets/my_data.yaml]`
 
 ---
 
-## 7. Adding a New Dataset
+## 6. 代码约定
 
-1. **Create dataset config**: `configs/datasets/my_data.yaml`
-   - Define `data.train` and `data.val` sections
-   - `_build_dataloaders()` in `cli.py` auto-generates transforms based on model backbone type
-
-2. **Create experiment** (or reuse existing):
-   - `_base_: [../_base_/default_runtime.yaml, ../models/X.yaml, ../datasets/my_data.yaml]`
-
----
-
-## 8. Known Issues & Current State
-
-| Issue | Status | Detail |
-|-------|--------|--------|
-| TrainerLoop not used in CLI | ⚠️ | `cli.py` uses a direct training loop, bypassing `TrainerLoop`/`HookBus`. Reason: interface mismatches were causing repeated breakage. Plan: refactor after v0.1. |
-| `test.py` / `infer.py` | ⚠️ | Placeholders only |
-| Detection runtime | ⚠️ | Uses random pseudo-labels |
-| MeanAP metric | ⚠️ | Placeholder |
-| `data/` module | ⚠️ | Files exist but not fully wired into TrainerLoop |
-| `CLI` output_dir | ✅ | Relative `./work_dirs/` resolved at runtime from CWD |
-| ViT-L OOM | ✅ | Fixed: batch=4 + grad_accum=8 |
-
-**See** `docs/status/current.md` for the canonical status.
+| 约定 | 说明 |
+|------|------|
+| 类型标注 | 每个 `.py` 顶部加 `from __future__ import annotations` |
+| 文档字符串 | Google 风格，每个公开类/函数都要有 |
+| 命名 | `snake_case` 函数/变量，`PascalCase` 类，`UPPER_CASE` 常量 |
+| 导入顺序 | stdlib → 第三方 → 内部，每组间空一行 |
+| GPU | 始终用 `device` 参数，不硬编码 `"cuda:0"`；数据传输用 `non_blocking=True` |
+| 打印 | 管道输出场景用 `flush=True` |
+| 错误处理 | raise `elysia_cv.core.errors` 中的异常，不裸抛 `Exception` |
 
 ---
 
-## 9. Code Conventions
-
-- **Type hints**: `from __future__ import annotations` at top of every `.py`
-- **Docstrings**: Google-style, triple-quoted, every public class/function
-- **Naming**: `snake_case` for functions/variables, `PascalCase` for classes, `UPPER_CASE` for constants
-- **Imports**: stdlib → third-party → internal, each group separated by blank line
-- **No circular imports**: use `from __future__ import annotations` + `TYPE_CHECKING` pattern when needed
-- **GPU**: always use `device` parameter, never hardcode `"cuda:0"`; use `non_blocking=True` for data transfers
-- **Config access**: use `cfg.section.field` (dataclass attributes), never `cfg["section"]["field"]`
-- **Print to stdout**: always use `flush=True` when output is piped/captured
-- **Error handling**: raise from `elysia_cv.core.errors`, not bare `Exception`
-
----
-
-## 10. Commit Conventions
+## 7. Git 提交约定
 
 ```
-feat: new feature
-fix: bug fix
-refactor: code restructuring (no behavior change)
-docs: documentation only
-test: test additions/changes
-chore: build, CI, dependencies
-style: formatting, linting (no code change)
+feat:     新功能
+fix:      Bug 修复
+refactor: 代码重构（行为不变）
+docs:     文档
+test:     测试
+chore:    构建、CI、依赖
+style:    格式化、lint（不改变代码逻辑）
 ```
 
-Examples:
-- `feat: add ViT-L/16 support with grad_accum=8`
-- `fix: save_freq→val_freq rename in checkpoint section`
-- `refactor: split model/dataset configs for composability`
-- `docs: update training guide with experiments/ path`
+---
+
+## 8. 已知问题
+
+| 问题 | 状态 | 详情 |
+|------|------|------|
+| CLI 绕过 TrainerLoop | ⚠️ | `cli.py` 使用直接训练循环，未使用 `TrainerLoop`/`HookBus` |
+| `test.py`/`infer.py` | ⚠️ | 占位实现 |
+| Detection runtime | ⚠️ | 使用随机伪标签 |
+| MeanAP metric | ⚠️ | 占位实现 |
+| ViT-L OOM | ✅ | 已修复：batch=4 + grad_accum=8 |
+
+详见 `docs/status/current.md`。

@@ -23,7 +23,7 @@ logs/
 *.pth
 *.ckpt
 checkpoints/
-data/
+/data/
 
 # System
 .DS_Store
