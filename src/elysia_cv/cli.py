@@ -258,7 +258,7 @@ def _cmd_train(args: argparse.Namespace) -> None:
                     print(msg, flush=True)
 
             # ── Checkpoint ─────────────────────────────────────
-            if global_step % save_freq == 0:
+            if global_step % val_freq == 0:
                 ckpt_name = f"checkpoint_step_{global_step}.pt"
                 ckpt_path = f"{cfg.run.output_dir}/{ckpt_name}"
                 os.makedirs(cfg.run.output_dir, exist_ok=True)

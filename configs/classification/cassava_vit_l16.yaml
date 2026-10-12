@@ -29,7 +29,7 @@ data:
     dataset_root: /data/hdd3/chuqi/data/cassava
     split: train
     loader:
-      batch_size: 8
+      batch_size: 4
       num_workers: 4
       prefetch_factor: 2
       pin_memory: true
@@ -89,7 +89,7 @@ engine:
   compile:
     enabled: false
   optimization:
-    gradient_accumulation_steps: 4
+    gradient_accumulation_steps: 8
     grad_clip_norm: 1.0
     optimizer_zero_grad_set_to_none: true
 
