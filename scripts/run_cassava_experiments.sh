@@ -44,7 +44,7 @@ else
 fi
 echo " Epochs:        30"
 echo " Eff. Batch:    32"
-echo " Output:        work_dirs/cassava_<model>/"
+echo " Output:        outputs/checkpoints/cassava_<model>/"
 echo "=============================================="
 echo ""
 
@@ -69,7 +69,7 @@ run_experiment() {
     shift 2
     local overrides=("$@")
 
-    local output_dir="$PROJECT_DIR/work_dirs/cassava_${name}"
+    local output_dir="$PROJECT_DIR/outputs/checkpoints/cassava_${name}"
     mkdir -p "$output_dir"
     local log_file="$output_dir/train.log"
     local config_path="$CONFIG_DIR/$config"
@@ -82,7 +82,7 @@ run_experiment() {
     echo "----------------------------------------"
 
     # Build override args
-    local set_args=(--set "run.output_dir=./work_dirs/cassava_${name}")
+    local set_args=(--set "run.output_dir=./outputs/checkpoints/cassava_${name}")
     for ov in "${overrides[@]}"; do
         [[ -n "$ov" ]] && set_args+=(--set "$ov")
     done
@@ -134,13 +134,13 @@ echo ""
 if [ ${#FAILED[@]} -gt 0 ]; then
     echo "FAILED experiments:"
     for f in "${FAILED[@]}"; do
-        echo "  - $f → work_dirs/cassava_${f}/train.log"
+        echo "  - $f → outputs/checkpoints/cassava_${f}/train.log"
     done
     exit 1
 else
     echo "All ${#EXPERIMENTS[@]} experiments completed successfully!"
     echo ""
-    echo "Results (work_dirs/):"
+    echo "Results (outputs/checkpoints/):"
     for exp_line in "${EXPERIMENTS[@]}"; do
         read -ra parts <<< "$exp_line"
         name="${parts[0]}"

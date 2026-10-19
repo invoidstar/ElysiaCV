@@ -24,7 +24,7 @@ python tools/train.py configs/experiments/cassava_resnet50.yaml
 python tools/train.py configs/classification/resnet50_imagenet.yaml
 
 # 检测
-python tools/train.py configs/detection/faster_rcnn_resnet50_coco.yaml
+python tools/train.py configs/detection/fcos_resnet50_coco.yaml
 
 # 分割
 python tools/train.py configs/segmentation/fcn_resnet50_ade20k.yaml
@@ -45,7 +45,7 @@ python tools/train.py configs/classification/resnet50_imagenet.yaml \
 
 ```bash
 python tools/train.py configs/classification/resnet50_imagenet.yaml \
-    --resume ./work_dirs/checkpoint_step_10000.pt
+    --resume ./outputs/checkpoints/checkpoint_step_10000.pt
 ```
 
 恢复时模型权重、优化器状态、scheduler 状态全部一致。

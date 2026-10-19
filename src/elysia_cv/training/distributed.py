@@ -114,8 +114,79 @@ def wrap_ddp(
 
 
 def unwrap_model(model: torch.nn.Module) -> torch.nn.Module:
-    """Return raw module from DDP wrapper."""
+    """Return raw module from DDP / FSDP wrapper."""
+    # FSDP: model._fsdp_wrapped_module
+    if hasattr(model, "_fsdp_wrapped_module"):
+        return model._fsdp_wrapped_module
+    # DDP: model.module
     return getattr(model, "module", model)
+
+
+# ---------------------------------------------------------------------------
+# FSDP wrapping
+# ---------------------------------------------------------------------------
+
+
+def wrap_fsdp(
+    model: torch.nn.Module,
+    ctx: DistributedContext,
+    *,
+    mixed_precision: bool = True,
+) -> torch.nn.Module:
+    """Wrap model with FSDP (Fully Sharded Data Parallel).
+
+    Uses ``size_based_auto_wrap_policy`` for automatic sharding granularity.
+    Falls back to DDP if FSDP is unavailable (PyTorch < 2.0).
+    """
+    if not ctx.enabled:
+        return model
+
+    try:
+        from torch.distributed.fsdp import (
+            FullyShardedDataParallel as FSDP,
+            MixedPrecision,
+        )
+        from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy
+
+        mp = None
+        if mixed_precision and torch.cuda.is_available():
+            mp = MixedPrecision(
+                param_dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16,
+                reduce_dtype=torch.float32,
+                buffer_dtype=torch.float32,
+            )
+
+        wrapped = FSDP(
+            model,
+            auto_wrap_policy=size_based_auto_wrap_policy,
+            mixed_precision=mp,
+            device_id=ctx.local_rank,
+        )
+        return wrapped
+
+    except ImportError:
+        # FSDP not available — fall back to DDP
+        return wrap_ddp(model, ctx)
+
+
+def fsdp_state_dict(model: torch.nn.Module) -> dict[str, Any]:
+    """Get full (un-sharded) state dict from an FSDP-wrapped model.
+
+    Falls back to ``unwarp_model(model).state_dict()`` when FSDP is not
+    available or the model is not FSDP-wrapped.
+    """
+    try:
+        from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+    except ImportError:
+        return unwrap_model(model).state_dict()
+
+    if not isinstance(model, FSDP):
+        return unwrap_model(model).state_dict()
+
+    from torch.distributed.fsdp import FullStateDictConfig, StateDictType
+    cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+    with FSDP.state_dict_type(model, StateDictType.FULL_STATE_DICT, cfg):
+        return model.state_dict()
 
 
 # ---------------------------------------------------------------------------

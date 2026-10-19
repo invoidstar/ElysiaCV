@@ -57,18 +57,18 @@ python tools/train.py configs/classification/resnet50_imagenet.yaml \
     --set data.train.batch_size=128 optim.params.lr=0.05
 
 # 训练：dry-run 验证
-python tools/train.py configs/detection/faster_rcnn_resnet50_coco.yaml \
+python tools/train.py configs/detection/fcos_resnet50_coco.yaml \
     --test-run
 
 # 训练：恢复
 python tools/train.py configs/classification/resnet50_imagenet.yaml \
-    --resume ./work_dirs/checkpoint_step_5000.pt
+    --resume ./outputs/checkpoints/checkpoint_step_5000.pt
 
 # 评测
 python tools/test.py configs/classification/resnet50_imagenet.yaml \
-    ./work_dirs/checkpoint_final.pt --out metrics.json
+    ./outputs/checkpoints/checkpoint_final.pt --out metrics.json
 
 # 推理
 python tools/infer.py configs/classification/resnet50_imagenet.yaml \
-    ./work_dirs/checkpoint_best_Accuracy.pt -i photo.jpg
+    ./outputs/checkpoints/checkpoint_best_Accuracy.pt -i photo.jpg
 ```

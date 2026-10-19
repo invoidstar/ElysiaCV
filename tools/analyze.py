@@ -6,10 +6,10 @@ Usage:
 
 Example:
     python tools/analyze.py configs/classification/cassava_resnet50.yaml \\
-        --checkpoint work_dirs/cassava_resnet50/checkpoint_best.pt \\
+        --checkpoint outputs/checkpoints/cassava_resnet50/checkpoint_best.pt \\
         --num-samples 5
 
-Output (saved to work_dirs/<model>/analysis/):
+Output (saved to outputs/checkpoints/<model>/analysis/):
     confusion_matrix.png          — normalized confusion matrix
     per_class_report.txt           — precision/recall/F1 per class
     gradcam_sample_*.png           — GradCAM heatmap overlays

@@ -124,3 +124,29 @@ class CVConfig:
                 "base_lr": self.schedule.base_lr,
             },
         }
+
+    def dump(self) -> dict[str, Any]:
+        """Return the *full* resolved config as a plain dict (YAML-safe).
+
+        Uses ``dataclasses.asdict`` to recursively convert all sections,
+        with ``_base_`` inheritance already resolved at load time.
+        """
+        import dataclasses
+        return _dataclass_to_dict(self)
+
+
+def _dataclass_to_dict(obj: object) -> object:
+    """Recursively convert a dataclass (or list/tuple) to plain dicts/lists."""
+    import dataclasses
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        result: dict[str, Any] = {}
+        for field in dataclasses.fields(obj):
+            value = getattr(obj, field.name)
+            result[field.name] = _dataclass_to_dict(value)
+        return result
+    elif isinstance(obj, (list, tuple)):
+        return [_dataclass_to_dict(v) for v in obj]
+    elif isinstance(obj, dict):
+        return {k: _dataclass_to_dict(v) for k, v in obj.items()}
+    else:
+        return obj

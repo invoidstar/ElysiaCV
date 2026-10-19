@@ -14,7 +14,7 @@ Layout::
     │   │   └── native_source/    # free-form model code
     │   └── ...
     ├── detection/
-    │   ├── faster_rcnn/
+    │   ├── fcos/
     │   └── community/
     │       └── yolo/
     └── ...

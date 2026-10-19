@@ -4,7 +4,7 @@ run:
   name: cassava_resnet50_fgvc
   stage: train
   seed: 42
-  output_dir: ./work_dirs/cassava
+  output_dir: ./outputs/checkpoints/cassava
 
 # Fine-grained cassava leaf disease classification (5 classes)
 model:

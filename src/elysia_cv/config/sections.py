@@ -25,7 +25,7 @@ class RunSection:
     name: str = ""
     stage: str = "train"  # "train" | "test" | "infer"
     seed: int = 42
-    output_dir: str = "./work_dirs"
+    output_dir: str = "./outputs/checkpoints"
     test_run: bool = False
 
     @classmethod
@@ -34,7 +34,7 @@ class RunSection:
             name=str(mapping.get("name", "")),
             stage=str(mapping.get("stage", "train")),
             seed=int(mapping.get("seed", 42)),
-            output_dir=str(mapping.get("output_dir", "./work_dirs")),
+            output_dir=str(mapping.get("output_dir", "./outputs/checkpoints")),
             test_run=bool(mapping.get("test_run", False)),
         )
 

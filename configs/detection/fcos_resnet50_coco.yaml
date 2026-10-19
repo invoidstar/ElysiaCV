@@ -1,14 +1,14 @@
 _base_: "../_base_/default_runtime.yaml"
 
 run:
-  name: faster_rcnn_resnet50_coco
+  name: fcos_resnet50_coco
   stage: train
   seed: 42
-  output_dir: ./work_dirs/faster_rcnn_coco
+  output_dir: ./outputs/checkpoints/fcos_coco
   test_run: false
 
 model:
-  type: faster_rcnn
+  type: fcos
   pretrained_path: null
   backbone:
     type: ResNet
@@ -117,8 +117,7 @@ tracking:
 eval:
   eval_freq: 5000
   metrics:
-    - mAP
-    - mAP_50
-    - mAP_75
+    - type: MeanAP
+      num_classes: 80
   save_best: mAP
   save_final: true

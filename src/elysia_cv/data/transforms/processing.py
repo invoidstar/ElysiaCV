@@ -13,13 +13,17 @@ class Resize:
 
     Args:
         size: (width, height) or single int for short edge.
+        scale: Alias for ``size`` (MMDetection-compatible).
         keep_ratio: If True, resize keeping aspect ratio.
     """
 
-    def __init__(self, size: int | tuple[int, int] = 224, keep_ratio: bool = False) -> None:
-        if isinstance(size, int):
-            size = (size, size)
-        self.size = size
+    def __init__(self, size=None, scale=None, keep_ratio: bool = False) -> None:
+        s = size if size is not None else scale
+        if s is None:
+            s = 224
+        if isinstance(s, int):
+            s = (s, s)
+        self.size = s
         self.keep_ratio = keep_ratio
 
     def __call__(self, results: dict) -> dict:
@@ -27,12 +31,30 @@ class Resize:
         img = results["img"]
         if isinstance(img, np.ndarray):
             img = Image.fromarray(img)
+
+        old_w, old_h = img.size
+
         if self.keep_ratio:
             img.thumbnail(self.size, Image.Resampling.LANCZOS)
         else:
             img = img.resize(self.size, Image.Resampling.LANCZOS)
+
+        new_w, new_h = img.size
+        scale_w = new_w / max(old_w, 1)
+        scale_h = new_h / max(old_h, 1)
+        results["scale_factor"] = (scale_w, scale_h)
+
         results["img"] = np.array(img)
         results["img_shape"] = results["img"].shape
+
+        # Adjust gt_bboxes to match new image size (detection transforms)
+        if "gt_bboxes" in results and len(results["gt_bboxes"]) > 0:
+            for bbox in results["gt_bboxes"]:
+                bbox[0] *= scale_w  # x1
+                bbox[1] *= scale_h  # y1
+                bbox[2] *= scale_w  # x2
+                bbox[3] *= scale_h  # y2
+
         return results
 
 

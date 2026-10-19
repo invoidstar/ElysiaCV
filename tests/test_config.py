@@ -192,13 +192,13 @@ class TestCVConfigLoad:
         assert config.schedule.steps == 100000
 
     def test_load_detection_config(self):
-        path = self.CONFIG_DIR / "detection" / "faster_rcnn_resnet50_coco.yaml"
+        path = self.CONFIG_DIR / "detection" / "fcos_resnet50_coco.yaml"
         if not path.exists():
             pytest.skip(f"{path} not found")
         config = load_cv_config_with_object(path)
-        assert config.model.type == "faster_rcnn"
+        assert config.model.type == "fcos"
         assert config.data.train.dataset_name == "COCO"
-        assert "mAP" in config.eval.metrics
+        assert config.eval.metrics[0]["type"] == "MeanAP"
 
     def test_load_segmentation_config(self):
         path = self.CONFIG_DIR / "segmentation" / "fcn_resnet50_ade20k.yaml"

@@ -6,7 +6,7 @@ _base_:
 
 run:
   name: cassava_herbs_swin_base
-  output_dir: ./work_dirs/cassava_herbs_swin_base
+  output_dir: ./outputs/checkpoints/cassava_herbs_swin_base
 
 data:
   train:

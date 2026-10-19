@@ -26,6 +26,7 @@ def build_dataloader(
     persistent_workers: bool = True,
     drop_last: bool = False,
     shuffle: bool = True,
+    collate_fn: Any = None,
     distributed: dict[str, Any] | None = None,
     seed: int = 42,
     **extra_kwargs: Any,
@@ -81,6 +82,7 @@ def build_dataloader(
         "drop_last": drop_last,
         "shuffle": shuffle_effective,
         "sampler": sampler,
+        "collate_fn": collate_fn,
     }
     if mp_context is not None:
         kwargs["multiprocessing_context"] = mp_context

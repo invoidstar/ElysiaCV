@@ -37,6 +37,8 @@ class TrainerLoop:
         distributed: DistributedContext | None = None,
         cadence: CadenceController | None = None,
         grad_clip_norm: float | None = None,
+        autocast_ctx: Any = None,
+        grad_scaler: Any = None,
     ) -> None:
         self.model = model
         self.optimizer = optimizer
@@ -50,6 +52,8 @@ class TrainerLoop:
         self.cadence = cadence or CadenceController()
         self.state = TrainerLoopState()
         self._data_iter = iter(dataloader)
+        self._autocast_ctx = autocast_ctx  # torch.amp.autocast or nullcontext
+        self._grad_scaler = grad_scaler    # torch.cuda.amp.GradScaler or None
 
     def run(self) -> None:
         """Execute the full training loop."""
@@ -58,6 +62,12 @@ class TrainerLoop:
 
         while self.state.global_step < self.max_steps and not self.state.should_stop:
             self.state.epoch += 1
+
+            # Correctly seed the DistributedSampler so each epoch shuffles differently
+            sampler = getattr(self.dataloader, "sampler", None)
+            if sampler is not None and hasattr(sampler, "set_epoch"):
+                sampler.set_epoch(self.state.epoch)
+
             self.callback.before_epoch(self)
 
             self._run_epoch()
@@ -96,6 +106,8 @@ class TrainerLoop:
                 outputs = self._forward(batch)
                 loss = outputs["loss"] if isinstance(outputs, dict) else outputs
                 scaled_loss = self.strategy.scale_loss(loss)
+                if self._grad_scaler is not None:
+                    scaled_loss = self._grad_scaler.scale(scaled_loss)
                 scaled_loss.backward()
 
             micro_count += 1
@@ -109,8 +121,14 @@ class TrainerLoop:
 
             # Sync point: optimizer step
             if is_sync:
+                if self._grad_scaler is not None:
+                    self._grad_scaler.unscale_(self.optimizer)
                 self.strategy.clip_gradients(self.model)
-                self.optimizer.step()
+                if self._grad_scaler is not None:
+                    self._grad_scaler.step(self.optimizer)
+                    self._grad_scaler.update()
+                else:
+                    self.optimizer.step()
 
                 self.state.global_step += 1
                 self.state.last_loss = total_loss / max(micro_count, 1)
@@ -131,12 +149,21 @@ class TrainerLoop:
         """
         _KNOWN_LABEL_KEYS = {"gt_label", "gt_bboxes", "gt_semantic_seg", "gt_masks", "labels"}
 
-        if isinstance(batch, dict) and "inputs" in batch:
-            inputs = batch["inputs"].to(self.device, non_blocking=True)
-            labels = {
-                k: v.to(self.device, non_blocking=True) if hasattr(v, "to") else v
-                for k, v in batch.items()
-                if k in _KNOWN_LABEL_KEYS
-            }
-            return self.model(inputs, **labels)
-        return self.model(batch)
+        autocast = self._autocast_ctx if self._autocast_ctx is not None else _nullcontext()
+
+        with autocast:
+            if isinstance(batch, dict) and "inputs" in batch:
+                inputs = batch["inputs"].to(self.device, non_blocking=True)
+                labels = {
+                    k: v.to(self.device, non_blocking=True) if hasattr(v, "to") else v
+                    for k, v in batch.items()
+                    if k in _KNOWN_LABEL_KEYS
+                }
+                return self.model(inputs, **labels)
+            return self.model(batch)
+
+
+class _nullcontext:
+    """Trivial context manager (Python 3.7+ has contextlib.nullcontext)."""
+    def __enter__(self) -> None: return None
+    def __exit__(self, *args: Any) -> None: pass

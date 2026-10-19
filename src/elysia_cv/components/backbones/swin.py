@@ -128,12 +128,12 @@ class SwinTransformer(nn.Module):
         """
         if self._features_only:
             feats = self.swin(x)  # FeatureListNet.forward() returns list
-            # Convert each [B, C, H, W] to [B, H*W, C] for HERBS neck
+            # timm FeatureListNet returns NHWC [B, H, W, C] — convert to [B, H*W, C]
             out = []
             for f in feats:
                 if len(f.shape) == 4:
-                    B, C, H, W = f.shape
-                    f = f.view(B, C, H * W).permute(0, 2, 1).contiguous()
+                    B, H, W, C = f.shape  # NHWC from timm
+                    f = f.reshape(B, H * W, C).contiguous()
                 out.append(f)
             return out
 

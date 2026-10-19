@@ -4,7 +4,7 @@ run:
   name: fcn_resnet50_ade20k
   stage: train
   seed: 42
-  output_dir: ./work_dirs/fcn_ade20k
+  output_dir: ./outputs/checkpoints/fcn_ade20k
 
 model:
   type: fcn

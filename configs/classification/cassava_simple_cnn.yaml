@@ -4,7 +4,7 @@ run:
   name: cassava_simple_cnn
   stage: train
   seed: 42
-  output_dir: ./work_dirs/cassava_simple_cnn
+  output_dir: ./outputs/checkpoints/cassava_simple_cnn
 
 # Simple 5-stage plain CNN — no residual connections
 model:

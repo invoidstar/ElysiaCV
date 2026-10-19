@@ -96,32 +96,217 @@ class MeanAccuracy(nn.Module):
 
 @METRICS.register_module()
 class MeanAP(nn.Module):
-    """Placeholder mAP metric for object detection.
+    """COCO-style mean Average Precision for object detection.
 
-    Full COCO-style evaluation requires external packages (pycocotools).
-    This stub computes a simple per-image average precision approximation.
+    Pure PyTorch + NumPy implementation — no pycocotools dependency.
+
+    Computes:
+      - ``mAP``:     AP averaged over IoU thresholds [0.50:0.05:0.95]
+      - ``mAP_50``:  AP at IoU=0.50
+      - ``mAP_75``:  AP at IoU=0.75
+
+    Usage::
+
+        metric = MeanAP(num_classes=80)
+        for batch in val_loader:
+            preds = forward_test(model, batch)
+            for i in range(len(batch)):
+                metric.update(
+                    pred_boxes=preds["pred_instances"][i]["bboxes"],
+                    pred_scores=preds["pred_instances"][i]["scores"],
+                    pred_labels=preds["pred_instances"][i]["labels"],
+                    gt_boxes=batch["gt_bboxes"][i],
+                    gt_labels=batch["gt_labels"][i],
+                )
+        results = metric.compute()
+        metric.reset()
     """
 
-    def __init__(self, iou_thresholds: list[float] | None = None, **kwargs) -> None:
+    def __init__(
+        self,
+        num_classes: int = 80,
+        iou_thresholds: list[float] | None = None,
+        **kwargs,
+    ) -> None:
         super().__init__()
-        self.iou_thresholds = iou_thresholds or [0.5, 0.75]
+        self.num_classes = num_classes
+        self.iou_thresholds = (
+            iou_thresholds
+            if iou_thresholds is not None
+            else [round(v, 2) for v in __import__("numpy").linspace(0.5, 0.95, 10)]
+        )
         self.reset()
 
+    # ------------------------------------------------------------------
+    # Metric protocol
+    # ------------------------------------------------------------------
+
     def reset(self) -> None:
-        self._ious: list[float] = []
+        # Per-image accumulators
+        self._all_preds: list[dict] = []  # [{boxes, scores, labels}]
+        self._all_gts: list[dict] = []     # [{boxes, labels, ignore}]
 
     @torch.no_grad()
-    def update(self, pred_boxes: torch.Tensor, target_boxes: torch.Tensor) -> None:
-        """Accumulate per-batch IoU statistics."""
-        from elysia_cv.losses.smooth_l1 import _IoULoss
-        iou_fn = _IoULoss(mode="iou", reduction="none")
-        # Simple: loss → IoU = 1 - loss
-        iou = 1 - iou_fn(pred_boxes, target_boxes).mean().item()
-        self._ious.append(max(iou, 0.0))
+    def update(
+        self,
+        pred_boxes: torch.Tensor,    # [P, 4]  xyxy
+        pred_scores: torch.Tensor,   # [P]
+        pred_labels: torch.Tensor,   # [P]
+        gt_boxes: torch.Tensor,      # [G, 4]
+        gt_labels: torch.Tensor,     # [G]
+    ) -> None:
+        """Accumulate one image's predictions and ground truths."""
+        self._all_preds.append({
+            "boxes": pred_boxes.detach().cpu(),
+            "scores": pred_scores.detach().cpu(),
+            "labels": pred_labels.detach().cpu(),
+        })
+        self._all_gts.append({
+            "boxes": gt_boxes.detach().cpu(),
+            "labels": gt_labels.detach().cpu(),
+            "ignore": torch.zeros(len(gt_labels), dtype=torch.bool),
+        })
 
     @torch.no_grad()
     def compute(self) -> dict[str, float]:
-        if not self._ious:
+        """COCO-style mAP computation.
+
+        Returns ``{"mAP": float, "mAP_50": float, "mAP_75": float}``.
+        """
+        if not self._all_gts:
             return {"mAP": 0.0, "mAP_50": 0.0, "mAP_75": 0.0}
-        avg_iou = sum(self._ious) / len(self._ious)
-        return {"mAP": avg_iou, "mAP_50": avg_iou, "mAP_75": avg_iou}
+
+        aps: list[float] = []
+        for iou_thr in self.iou_thresholds:
+            class_aps = []
+            for cls_id in range(self.num_classes):
+                ap = self._compute_ap_for_class(cls_id, iou_thr)
+                if ap is not None:  # None = no GT for this class
+                    class_aps.append(ap)
+            if class_aps:
+                aps.append(float(sum(class_aps)) / len(class_aps))
+            else:
+                aps.append(0.0)
+
+        # mAP = mean over thresholds
+        mAP = float(sum(aps)) / max(len(aps), 1)
+
+        # mAP_50 = AP at 0.50
+        idx_50 = 0  # first threshold is 0.50
+        mAP_50 = aps[idx_50] if idx_50 < len(aps) else mAP
+
+        # mAP_75 = AP at 0.75
+        idx_75 = 5  # 0.50 + 5*0.05 = 0.75
+        mAP_75 = aps[idx_75] if idx_75 < len(aps) else mAP
+
+        return {"mAP": mAP, "mAP_50": mAP_50, "mAP_75": mAP_75}
+
+    # ------------------------------------------------------------------
+    # Internal AP computation (11-point interpolation)
+    # ------------------------------------------------------------------
+
+    def _compute_ap_for_class(self, cls_id: int, iou_thr: float) -> float:
+        """Compute AP for a single class at a single IoU threshold."""
+        import numpy as np
+
+        # Collect all predictions for this class
+        all_scores: list[float] = []
+        all_det_idx: list[int] = []   # which image
+        all_det_local: list[int] = []  # which box within that image's preds
+
+        for img_idx, pred in enumerate(self._all_preds):
+            mask = pred["labels"] == cls_id
+            if not mask.any():
+                continue
+            indices = mask.nonzero(as_tuple=True)[0]
+            for j in indices:
+                all_scores.append(pred["scores"][j].item())
+                all_det_idx.append(img_idx)
+                all_det_local.append(j.item())
+
+        # Count total GT instances for this class
+        gt_matched: list[dict[int, bool]] = [
+            {j: False for j in range(len(gt["labels"]))
+             if gt["labels"][j].item() == cls_id}
+            for gt in self._all_gts
+        ]
+        npos = sum(len(m) for m in gt_matched)
+        if npos == 0:
+            return None  # exclude from averaging (no GT for this class)
+
+        if not all_scores:
+            return 0.0
+
+        # Sort by score descending
+        order = np.argsort(all_scores)[::-1]
+
+        tp = np.zeros(len(order), dtype=np.float32)
+        fp = np.zeros(len(order), dtype=np.float32)
+
+        for rank, ord_idx in enumerate(order):
+            img_idx = all_det_idx[ord_idx]
+            det_j = all_det_local[ord_idx]
+
+            det_box = self._all_preds[img_idx]["boxes"][det_j]  # [4]
+            gt_boxes = self._all_gts[img_idx]["boxes"]
+            gt_labels = self._all_gts[img_idx]["labels"]
+            gt_cls_mask = gt_labels == cls_id
+
+            if not gt_cls_mask.any():
+                fp[rank] = 1.0
+                continue
+
+            gt_cls_boxes = gt_boxes[gt_cls_mask]  # [G_c, 4]
+            gt_indices = gt_cls_mask.nonzero(as_tuple=True)[0].tolist()
+
+            # Compute IoU with all GT boxes of this class in this image
+            ious = _box_iou(det_box.unsqueeze(0), gt_cls_boxes)  # [1, G_c]
+            best_iou, best_j = ious[0].max(dim=0)
+            best_gt_idx = gt_indices[best_j.item()]
+
+            if best_iou >= iou_thr and not gt_matched[img_idx].get(best_gt_idx, True):
+                tp[rank] = 1.0
+                gt_matched[img_idx][best_gt_idx] = True
+            else:
+                fp[rank] = 1.0
+
+        # Compute precision-recall curve
+        tp_cum = np.cumsum(tp)
+        fp_cum = np.cumsum(fp)
+        rec = tp_cum / max(npos, 1)
+        prec = tp_cum / np.maximum(tp_cum + fp_cum, 1e-8)
+
+        # 101-point interpolation (COCO standard)
+        ap = 0.0
+        for t in np.linspace(0, 1, 101):
+            if np.any(rec >= t):
+                ap += float(np.max(prec[rec >= t]))
+        ap /= 101.0
+        return ap
+
+
+def _box_iou(boxes_a: torch.Tensor, boxes_b: torch.Tensor) -> torch.Tensor:
+    """Compute pairwise IoU between two sets of boxes (xyxy format).
+
+    Args:
+        boxes_a: [N, 4]
+        boxes_b: [M, 4]
+
+    Returns:
+        [N, M] IoU matrix.
+    """
+    # Intersection
+    inter_x1 = torch.max(boxes_a[:, None, 0], boxes_b[None, :, 0])
+    inter_y1 = torch.max(boxes_a[:, None, 1], boxes_b[None, :, 1])
+    inter_x2 = torch.min(boxes_a[:, None, 2], boxes_b[None, :, 2])
+    inter_y2 = torch.min(boxes_a[:, None, 3], boxes_b[None, :, 3])
+    inter_w = (inter_x2 - inter_x1).clamp(min=0)
+    inter_h = (inter_y2 - inter_y1).clamp(min=0)
+    inter_area = inter_w * inter_h
+
+    # Union
+    area_a = (boxes_a[:, 2] - boxes_a[:, 0]) * (boxes_a[:, 3] - boxes_a[:, 1])
+    area_b = (boxes_b[:, 2] - boxes_b[:, 0]) * (boxes_b[:, 3] - boxes_b[:, 1])
+    union = area_a[:, None] + area_b[None, :] - inter_area
+
+    return inter_area / (union + 1e-6)

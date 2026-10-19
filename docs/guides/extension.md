@@ -201,7 +201,7 @@ _base_:
 
 run:
   name: my_experiment
-  output_dir: ./work_dirs/my_experiment
+  output_dir: ./outputs/checkpoints/my_experiment
 
 data:
   train:

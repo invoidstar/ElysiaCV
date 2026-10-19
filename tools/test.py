@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Evaluation entry point: ``python tools/test.py configs/xxx.yaml``."""
+"""Evaluation entry point — thin shell over ``elysia test``.
+
+Usage::
+
+    python tools/test.py configs/classification/cassava_resnet18.yaml
+    python tools/test.py configs/detection/fcos_resnet50_coco.yaml --checkpoint path/to/best.pt
+
+All arguments are forwarded directly to ``elysia test``.
+"""
 
 from __future__ import annotations
 

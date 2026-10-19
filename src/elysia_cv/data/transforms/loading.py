@@ -31,9 +31,15 @@ class LoadImageFromFile:
 
 @TRANSFORMS.register_module()
 class LoadAnnotations:
-    """Load annotations — placeholder for detection/segmentation tasks.
+    """Load and format annotations for detection / segmentation tasks.
 
-    Expects ``results["ann_path"]``; loads JSON or other format.
+    Pre-populated fields (by dataset) are formatted into the standard
+    ElysiaCV convention: numpy arrays in xyxy float32 format.
+
+    Args:
+        with_bbox: Load bounding boxes.
+        with_mask: Load instance masks.
+        with_seg: Load semantic segmentation mask.
     """
 
     def __init__(self, with_bbox: bool = True, with_mask: bool = False, with_seg: bool = False) -> None:
@@ -42,7 +48,38 @@ class LoadAnnotations:
         self.with_seg = with_seg
 
     def __call__(self, results: dict) -> dict:
-        # In real implementation, parse annotation file
-        results["gt_bboxes"] = results.get("gt_bboxes", [])
-        results["gt_labels"] = results.get("gt_labels", [])
+        # Bounding boxes: ensure numpy float32 in xyxy format
+        if self.with_bbox and "gt_bboxes" in results:
+            bboxes = results["gt_bboxes"]
+            if isinstance(bboxes, list) and len(bboxes) > 0:
+                if isinstance(bboxes[0], (list, np.ndarray)):
+                    results["gt_bboxes"] = np.array(bboxes, dtype=np.float32)
+                else:
+                    results["gt_bboxes"] = np.array(bboxes, dtype=np.float32).reshape(-1, 4)
+            elif isinstance(bboxes, list) and len(bboxes) == 0:
+                results["gt_bboxes"] = np.zeros((0, 4), dtype=np.float32)
+            elif isinstance(bboxes, np.ndarray):
+                results["gt_bboxes"] = bboxes.astype(np.float32)
+
+        # Labels: ensure numpy int64
+        if self.with_bbox and "gt_labels" in results:
+            labels = results["gt_labels"]
+            if isinstance(labels, list):
+                results["gt_labels"] = np.array(labels, dtype=np.int64)
+            elif isinstance(labels, np.ndarray):
+                results["gt_labels"] = labels.astype(np.int64)
+
+        # Semantic segmentation mask
+        if self.with_seg and "gt_semantic_seg" in results:
+            seg = results["gt_semantic_seg"]
+            if isinstance(seg, np.ndarray):
+                results["gt_semantic_seg"] = seg.astype(np.int64)
+
+        # Store metadata
+        if "gt_bboxes" in results:
+            results["gt_bboxes_ignore"] = results.get(
+                "gt_bboxes_ignore", np.zeros((0, 4), dtype=np.float32))
+            results["gt_labels_ignore"] = results.get(
+                "gt_labels_ignore", np.zeros((0,), dtype=np.int64))
+
         return results

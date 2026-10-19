@@ -4,7 +4,7 @@ run:
   name: resnet50_imagenet
   stage: train
   seed: 42
-  output_dir: ./work_dirs/resnet50_imagenet
+  output_dir: ./outputs/checkpoints/resnet50_imagenet
   test_run: false
 
 model:

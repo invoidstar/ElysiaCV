@@ -46,8 +46,8 @@ class TestDetectionPipeline:
         assert outs["bbox_pred"][0].size(1) == 4  # bbox dims
 
     def test_det_model_build_and_train(self):
-        """Build Faster R-CNN + run forward_train."""
-        from elysia_cv.models.detection.faster_rcnn.runtime import (
+        """Build FCOS + run forward_train."""
+        from elysia_cv.models.detection.fcos.runtime import (
             build_model,
             forward_train,
         )
@@ -95,16 +95,16 @@ class TestDetectionPipeline:
         assert loss3.item() > 0
 
     def test_det_plugin_discovery(self):
-        """faster_rcnn plugin auto-discovered with correct task_type."""
+        """fcos plugin auto-discovered with correct task_type."""
         from elysia_cv.models.registry import ModelRegistry
 
         reg = ModelRegistry.discover()
-        assert "faster_rcnn" in reg
-        p = reg.get("faster_rcnn")
+        assert "fcos" in reg
+        p = reg.get("fcos")
         assert p.plugin.task_type == "detection"
         specs = list(p.plugin.model_specs())
         assert len(specs) == 2
-        assert specs[0].name == "faster_rcnn_r50"
+        assert specs[0].name == "fcos_r50"
 
 
 class TestSegmentationPipeline:
@@ -244,7 +244,7 @@ class TestSegmentationPipeline:
 
     @staticmethod
     def _build_det():
-        from elysia_cv.models.detection.faster_rcnn.runtime import build_model
+        from elysia_cv.models.detection.fcos.runtime import build_model
         return build_model({"model": {
             "backbone": {"type": "ResNet", "depth": 18, "out_indices": [0, 1, 2, 3]},
             "neck": {"type": "FPN", "in_channels": [64, 64, 128, 256],
@@ -254,7 +254,7 @@ class TestSegmentationPipeline:
 
     @staticmethod
     def _det_forward(model, batch, *, device=None):
-        from elysia_cv.models.detection.faster_rcnn.runtime import forward_train
+        from elysia_cv.models.detection.fcos.runtime import forward_train
         return forward_train(model, batch, device=device)
 
     @staticmethod

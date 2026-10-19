@@ -1,7 +1,7 @@
 # AGENTS.md — ElysiaCV
 
 > AI agent 和贡献者：在修改代码之前，请先阅读本文档。
-> 最后更新：2026-10-12
+> 最后更新：2026-10-20
 
 ---
 
@@ -14,9 +14,9 @@ ElysiaCV 是一个面向计算机视觉（分类、检测、分割）的统一�
 - **配置驱动**：一切从 YAML 配置出发（MMDetection 式的 `_base_` 继承）
 - **插件式架构**：模型通过装饰器自注册，无需集中注册文件
 - **组件库**：共享的 Backbone、Neck、Head、Loss、Metric
-- **训练引擎**：TrainerLoop + HookBus（checkpoint/log/evaluation），支持 DDP
+- **训练引擎**：TrainerLoop + HookBus（checkpoint/log/evaluation），支持 DDP / FSDP
 
-**版本**：v0.1.0 Alpha | **Python**：≥3.10 | **PyTorch**：≥2.0
+**版本**：v0.2.0 Alpha | **Python**：≥3.10 | **PyTorch**：≥2.0
 
 ---
 
@@ -37,37 +37,37 @@ ElysiaCV/
 │  ║ ├── config/         配置加载、_base_ 合并、校验               ║
 │  ║ ├── components/     共享 Backbone / Neck / Head 组件库        ║
 │  ║ ├── losses/         损失函数 (FocalLoss, CrossEntropy...)     ║
-│  ║ ├── metrics/        评估指标                                  ║
-│  ║ ├── optim/          优化器与调度器构建器                       ║
-│  ║ ├── data/           通用数据加载层                             ║
-│  ║ ├── models/         模型契约 + 参考插件                        ║
-│  ║ ├── training/       训练引擎 (Loop, Hooks, DDP, Engine)       ║
-│  ║ └── cli.py          统一 CLI 入口                             ║
+│  ║ ├── metrics/        评估指标 (MeanAP, MeanIoU, Accuracy)       ║
+│  ║ ├── optim/          优化器与调度器构建器 (SGD/Adam/AdamW/RMSprop)║
+│  ║ ├── data/           通用数据加载层 (COCO/ImageFolder/Adapter) ║
+│  ║ ├── models/         模型契约 + 参考插件 (resnet/fcos/fcn)     ║
+│  ║ ├── training/       训练引擎 (Loop, Hooks, DDP/FSDP, Engine)  ║
+│  ║ ├── utils/          可视化等工具                              ║
+│  ║ └── cli.py          统一 CLI (train/test/infer/config dump)   ║
 │  ║                                                              ║
 │  ╚══════════════════════════════════════════════════════════════╝
 │
-├── tools/train.py                ← 训练入口（调用 cli.py）
-├── tools/test.py / infer.py
+├── tools/train.py / test.py / infer.py  ← 训练/评测/推理入口
 │
 │  ╔══════════════════════════════════════════════════════════════╗
 │  ║  📦 项目侧 — Cassava 木薯叶片病害分类实验                     ║
 │  ╠══════════════════════════════════════════════════════════════╣
-│  ║  详见 projects/cassava/AGENTS.md                              ║
+│  ║  详见 projects/HERBS/AGENTS.md                              ║
 │  ║                                                              ║
 ├──╢ configs/                                                     ║
-│  ║ ├── models/mlp.yaml .. vit_l16.yaml    模型定义 (7 个)        ║
+│  ║ ├── models/mlp.yaml .. swin_base.yaml   模型定义 (9 个)       ║
 │  ║ ├── datasets/cassava.yaml              Cassava 数据集         ║
-│  ║ └── experiments/cassava_*.yaml         实验组合 (7 个)        ║
+│  ║ └── experiments/cassava_*.yaml         实验组合 (9 个)        ║
 │  ║                                                              ║
 ├──╢ scripts/run_cassava_experiments.sh     批量实验启动脚本        ║
 ├──╢ tools/analyze.py                       训练后分析              ║
-├──╢ projects/cassava/                      项目文档目录            ║
+├──╢ projects/HERBS/                      项目文档目录            ║
 │  ║ ├── AGENTS.md                          项目约定与实验记录      ║
 │  ║ └── tools/analyze.py                   混淆矩阵 + GradCAM     ║
 │  ║                                                              ║
 │  ╚══════════════════════════════════════════════════════════════╝
 │
-├── tests/                         pytest
+├── tests/                         pytest (7 套)
 ├── docs/                          指南和架构文档
 └── AGENTS.md                      ← 你在这里（根文档）
 ```
@@ -161,23 +161,37 @@ black --check src/ tests/ tools/
 # 单卡
 python tools/train.py configs/experiments/cassava_resnet50.yaml
 
+# 单卡 + 断点续训
+python tools/train.py configs/experiments/cassava_resnet50.yaml --resume
+
 # 多卡 (torchrun)
-CUDA_VISIBLE_DEVICES=0,1 bash projects/cassava/scripts/ddp_run.sh \
-    configs/experiments/cassava_resnet50.yaml
+CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 \
+    tools/train.py configs/experiments/cassava_resnet50.yaml
 
 # 带覆盖
 python tools/train.py configs/experiments/cassava_vit_b16.yaml \
     --set schedule.steps=100 optim.params.lr=0.001
 
+# 评测
+python tools/test.py configs/experiments/cassava_resnet50.yaml \
+    --checkpoint outputs/checkpoints/xxx/checkpoint_best.pt
+
+# 推理
+python tools/infer.py configs/experiments/cassava_resnet50.yaml \
+    -c outputs/checkpoints/xxx/checkpoint_best.pt -i image.jpg
+
+# 查看配置
+elysia config dump configs/experiments/cassava_resnet50.yaml
+
 # 全量对比（单机单卡顺序）
-bash projects/cassava/scripts/run.sh
+bash projects/HERBS/scripts/run.sh
 ```
 
 ### 4.5 训练后分析
 
 ```bash
 python tools/analyze.py configs/experiments/cassava_resnet50.yaml \
-    --checkpoint work_dirs/cassava_resnet50/checkpoint_best.pt
+    --checkpoint outputs/checkpoints/cassava_resnet50/checkpoint_best.pt
 ```
 
 输出：`analysis/confusion_matrix.png`、`analysis/per_class_report.txt`、`analysis/gradcam/`
@@ -229,15 +243,22 @@ style:    格式化、lint（不改变代码逻辑）
 
 ---
 
-## 8. 已知问题
+## 8. 已解决的问题
 
 | 问题 | 状态 | 详情 |
 |------|------|------|
 | CLI ↔ TrainerLoop 统一 | ✅ | `cli.py` 已使用 `TrainingEngine` → `TrainerLoop` + `HookBus` |
 | 配置模型/数据集分离 | ✅ | 拆分为 `configs/{models,datasets,experiments}/` |
 | DDP 支持 | ✅ | `TrainingEngine` 内置 DDP init + `wrap_ddp` + `no_sync` |
-| `test.py`/`infer.py` | ⚠️ | 占位实现 |
-| Detection runtime | ⚠️ | 使用随机伪标签 |
-| MeanAP metric | ⚠️ | 占位实现 |
+| FSDP 支持 | ✅ | `wrap_fsdp` + `fsdp_state_dict`，engine 中 strategy 自动路由 |
+| `test.py`/`infer.py` | ✅ | 真实实现：checkpoint 加载 + eval 循环 + 分类/检测路由 |
+| Detection runtime | ✅ | FCOS anchor-free：center-sampling 真损失 + NMS 后处理 |
+| MeanAP metric | ✅ | COCO-standard 101-pt mAP / mAP_50 / mAP_75 |
+| `--resume` 断点续训 | ✅ | 自动恢复 model/optimizer/scheduler/step |
+| MessageHub | ✅ | 全局标量状态总线 + best-value 追踪 |
+| DataPrefetcher | ✅ | CUDA stream 异步预取批次到 GPU |
+| config dump | ✅ | `elysia config dump` 展开 _base_ 继承 |
+| Data Adapter | ✅ | HF / torchvision 分类+检测格式适配器 |
+| 检测可视化 | ✅ | `draw_bboxes` + `draw_segmentation_overlay` |
 
 详见 `docs/status/current.md`。

@@ -6,7 +6,7 @@ _base_:
 
 run:
   name: cassava_vit_l16
-  output_dir: ./work_dirs/cassava_vit_l16
+  output_dir: ./outputs/checkpoints/cassava_vit_l16
 
 data:
   train:

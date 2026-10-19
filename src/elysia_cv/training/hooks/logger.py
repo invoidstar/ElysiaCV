@@ -33,13 +33,17 @@ class LoggerHook(Hook):
         self,
         log_freq: int = 50,
         total_steps: int = 1,
+        ema_alpha: float = 0.0,
+        message_hub: Any = None,
     ) -> None:
         self.log_freq = log_freq
         self.total_steps = total_steps
+        self.ema_alpha = ema_alpha
         self._start_time = time.time()
         self._is_tty = sys.stdout.isatty()
         self._pbar = None
         self._loss_window: list[float] = []
+        self._loss_ema: float | None = None  # EMA-smoothed loss
         self._best_acc: float | None = None  # tracked from EvalHook
         self._final_ckpt: str = ""  # tracked from CheckpointHook
         self._is_main = self._should_log()
@@ -90,38 +94,59 @@ class LoggerHook(Hook):
                 postfix={"loss": "---", "lr": "---", "eta": "---"},
             )
 
+        # MessageHub: write step-level metrics for other hooks to read
+        self._write_to_hub(step=0, loss=0.0, lr=0.0)
+
+    def _write_to_hub(self, **kwargs) -> None:
+        """Publish scalars to the global MessageHub (best-effort, no crash)."""
+        try:
+            from elysia_cv.training.message_hub import get_message_hub
+            hub = get_message_hub()
+            for k, v in kwargs.items():
+                hub.update_scalar(f"train/{k}", float(v))
+        except Exception:
+            pass
+
     def after_step(self, loop) -> None:
         if not self._is_main:
             return
 
         step = loop.state.global_step
-        loss = loop.state.last_loss
+        loss = float(loop.state.last_loss) if loop.state.last_loss is not None else 0.0
         lr = loop.optimizer.param_groups[0].get("lr", 0.0)
 
-        self._loss_window.append(float(loss) if loss is not None else 0.0)
+        self._loss_window.append(loss)
+
+        # EMA smoothing (if enabled)
+        if self.ema_alpha > 0:
+            if self._loss_ema is None:
+                self._loss_ema = loss
+            else:
+                self._loss_ema = self.ema_alpha * loss + (1 - self.ema_alpha) * self._loss_ema
+
+        # Display value: EMA if enabled, else window average
+        if self.ema_alpha > 0 and self._loss_ema is not None:
+            display_loss = self._loss_ema
+        elif len(self._loss_window) >= self.log_freq:
+            display_loss = sum(self._loss_window[-self.log_freq:]) / self.log_freq
+        else:
+            display_loss = loss
 
         # ── TTY mode: update progress bar ─────────────────────
         if self._pbar is not None:
             self._pbar.update(1)
-            if step % self.log_freq == 0 and len(self._loss_window) >= self.log_freq:
-                avg = sum(self._loss_window[-self.log_freq:]) / self.log_freq
+            if step % self.log_freq == 0 or step <= 5:
                 self._pbar.set_postfix(
-                    loss=f"{avg:.4f}", lr=f"{lr:.2e}", eta=self._eta(step),
-                )
-            elif step <= 5:
-                self._pbar.set_postfix(
-                    loss=f"{loss:.4f}", lr=f"{lr:.2e}", eta=self._eta(step),
+                    loss=f"{display_loss:.4f}", lr=f"{lr:.2e}", eta=self._eta(step),
                 )
             return
 
         # ── Non-TTY mode: timestamped percentage lines ──────────
         if step % self.log_freq == 0 or step == 1:
-            window = self._loss_window[-self.log_freq:]
-            avg = sum(window) / max(len(window), 1)
             pct = 100.0 * step / max(self.total_steps, 1)
             print(
                 f"  [{self._timestamp()}] [{pct:5.1f}%] step {step:>6,d}/{self.total_steps:,d}"
-                f"  loss={avg:.4f}  lr={lr:.2e}  ETA {self._eta(step)}",
+                f"  loss={display_loss:.4f}  lr={lr:.2e}  ETA {self._eta(step)}",
                 flush=True,
             )
 
@@ -154,14 +179,34 @@ class LoggerHook(Hook):
 
     # ── Callbacks for other hooks to relay messages ────────────
 
-    def on_eval_result(self, step: int, acc: float, val_loss: float, improved: bool) -> None:
-        """Record eval result — called by EvalHook. Prints immediately."""
-        # Track best accuracy for final summary
-        if self._best_acc is None or acc > self._best_acc:
-            self._best_acc = acc
+    def on_eval_result(
+        self,
+        step: int,
+        acc: float = 0.0,
+        val_loss: float = 0.0,
+        improved: bool = False,
+        results: dict | None = None,
+        primary: float = 0.0,
+    ) -> None:
+        """Record eval result — called by EvalHook. Prints immediately.
+
+        Supports both legacy ``(acc, val_loss)`` and new ``(results, primary)``
+        keyword signatures.
+        """
+        # Best tracking
+        use_acc = acc if acc > 0 else primary
+        if self._best_acc is None or use_acc > self._best_acc:
+            self._best_acc = use_acc
 
         flag = " *" if improved else ""
-        msg = f"  [eval]  step {step:>6,d}  acc={acc:.4f}  val_loss={val_loss:.4f}{flag}"
+
+        if results and len(results) > 1:
+            # Multi-metric results (detection style)
+            parts = "  ".join(f"{k}={v:.4f}" for k, v in results.items())
+            msg = f"  [eval]  step {step:>6,d}  {parts}{flag}"
+        else:
+            msg = f"  [eval]  step {step:>6,d}  acc={use_acc:.4f}{flag}"
+
         if self._pbar is not None:
             self._pbar.write(msg)
         else:

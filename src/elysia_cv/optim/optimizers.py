@@ -90,6 +90,21 @@ def SGD(params: Any, lr: float = 0.01, momentum: float = 0.0, weight_decay: floa
 
 
 @OPTIMIZERS.register_module()
+def Adam(params: Any, lr: float = 1e-3, betas: tuple[float, float] = (0.9, 0.999),
+         eps: float = 1e-8, weight_decay: float = 0.0, **kwargs: Any) -> torch.optim.Optimizer:
+    return torch.optim.Adam(params, lr=lr, betas=betas, eps=eps,
+                            weight_decay=weight_decay, **kwargs)
+
+
+@OPTIMIZERS.register_module()
 def AdamW(params: Any, lr: float = 0.001, betas: tuple[float, float] = (0.9, 0.999),
           eps: float = 1e-8, weight_decay: float = 0.01, **kwargs: Any) -> torch.optim.Optimizer:
     return torch.optim.AdamW(params, lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, **kwargs)
+
+
+@OPTIMIZERS.register_module()
+def RMSprop(params: Any, lr: float = 1e-2, alpha: float = 0.99, eps: float = 1e-8,
+            weight_decay: float = 0.0, momentum: float = 0.0,
+            **kwargs: Any) -> torch.optim.Optimizer:
+    return torch.optim.RMSprop(params, lr=lr, alpha=alpha, eps=eps,
+                               weight_decay=weight_decay, momentum=momentum, **kwargs)

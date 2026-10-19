@@ -36,12 +36,14 @@ class CassavaDataset(Dataset):
         data_root: str,
         split: str = "train",
         transform: Any = None,
+        pipeline: Any = None,
         **kwargs,
     ) -> None:
         super().__init__()
         self.root = Path(data_root)
         self.split = split
-        self.transform = transform
+        # Support both legacy ``transform`` and ``pipeline`` (prefer pipeline)
+        self.pipeline = pipeline if pipeline is not None else transform
 
         import pandas as pd
 
@@ -61,8 +63,8 @@ class CassavaDataset(Dataset):
         img_path = self.root / "train_images" / img_id
         img = Image.open(img_path).convert("RGB")
 
-        if self.transform is not None:
-            img = self.transform(img)
+        if self.pipeline is not None:
+            img = self.pipeline(img)
 
         return {
             "inputs": img,

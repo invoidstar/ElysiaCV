@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Inference entry point: ``python tools/infer.py configs/xxx.yaml -i image.jpg``."""
+"""Inference entry point — thin shell over ``elysia infer``.
+
+Usage::
+
+    python tools/infer.py configs/classification/cassava_resnet18.yaml -c best.pt -i image.jpg
+    python tools/infer.py configs/detection/fcos_resnet50_coco.yaml -c best.pt -i /path/to/images/
+
+All arguments are forwarded directly to ``elysia infer``.
+"""
 
 from __future__ import annotations
 

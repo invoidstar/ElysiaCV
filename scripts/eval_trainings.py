@@ -85,7 +85,7 @@ print(f"{'Model':<25s} | {'Accuracy':>8s} | {'Params':>8s} | {'Steps':>8s}")
 print('-' * 65)
 
 for name, cfg_path in pairs:
-    wd = f'work_dirs/{name}'
+    wd = f'outputs/checkpoints/{name}'
     ckpt_tag, ckpt_path = find_best_ckpt(wd)
     if ckpt_path is None:
         print(f'{name:<25s} | {"N/A":>8s} | {"-":>8s} | {"-":>8s}')

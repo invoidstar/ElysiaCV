@@ -39,7 +39,7 @@ _base_:
 
 run:
   name: cassava_resnet50             # 4. 实验级覆盖（最高优先级）
-  output_dir: ./work_dirs/cassava_resnet50
+  output_dir: ./outputs/checkpoints/cassava_resnet50
 
 data:
   train:
@@ -76,5 +76,5 @@ data:
 ## 注意
 
 - `dataset_root` 使用绝对路径 `/data/hdd3/chuqi/data/...`
-- `output_dir` 使用相对路径 `./work_dirs/...`（运行时从 CWD 解析）
+- `output_dir` 使用相对路径 `./outputs/checkpoints/...`（运行时从 CWD 解析）
 - transforms 由 `_build_dataloaders()` 根据 backbone 类型自动生成，不在配置中定义

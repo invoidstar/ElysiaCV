@@ -6,7 +6,7 @@ _base_:
 
 run:
   name: cassava_resnet34
-  output_dir: ./work_dirs/cassava_resnet34
+  output_dir: ./outputs/checkpoints/cassava_resnet34
 
 data:
   train:

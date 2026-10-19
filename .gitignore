@@ -16,13 +16,13 @@ env/
 *.swp
 *.swo
 
-# ML / Data
-work_dirs/
-logs/
+# ML / Training outputs
+outputs/checkpoints/
 *.pt
 *.pth
 *.ckpt
-checkpoints/
+
+# Data
 /data/
 
 # System

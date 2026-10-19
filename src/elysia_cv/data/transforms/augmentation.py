@@ -35,10 +35,12 @@ class RandomFlip:
             # Also flip bboxes if present
             if "gt_bboxes" in results and len(results["gt_bboxes"]) > 0:
                 w = img.shape[1]
-                for bbox in results["gt_bboxes"]:
-                    x1, y1, x2, y2 = bbox
-                    if self.direction == "horizontal":
-                        bbox[:] = [w - x2, y1, w - x1, y2]
+                bboxes = results["gt_bboxes"]
+                if self.direction == "horizontal":
+                    x1 = bboxes[:, 0].copy()
+                    x2 = bboxes[:, 2].copy()
+                    bboxes[:, 0] = w - x2
+                    bboxes[:, 2] = w - x1
         else:
             results["flip"] = False
         return results

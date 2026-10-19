@@ -26,7 +26,7 @@ from elysia_cv.training.hooks.logger import LoggerHook
 
 hooks = HookBus()
 hooks.register(LoggerHook(log_freq=50))
-hooks.register(CheckpointHook(output_dir="./work_dirs", save_freq=1000))
+hooks.register(CheckpointHook(output_dir="./outputs/checkpoints", save_freq=1000))
 ```
 
 **当前状态**：CLI 中的训练循环未使用 HookBus（接口不匹配导致），而是直接在 `cli.py` 中内联了训练循环。未来计划重构为通过 HookBus 驱动。

@@ -10,6 +10,7 @@ model:
     variant: swin_base_384
     pretrained: true
     features_only: true
+    input_size: [384, 384]
   neck:
     type: HERBSNeck
     num_classes: 5

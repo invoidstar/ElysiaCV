@@ -4,7 +4,7 @@ run:
   name: cassava_vit_l16
   stage: train
   seed: 42
-  output_dir: ./work_dirs/cassava_vit_l16
+  output_dir: ./outputs/checkpoints/cassava_vit_l16
 
 # ViT-Large/16 — 307M params, patch=16
 model:

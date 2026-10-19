@@ -14,7 +14,7 @@ _base_: "../_base_/default_runtime.yaml"
 run:
   name: my_experiment
   stage: train
-  output_dir: ./work_dirs/my_experiment
+  output_dir: ./outputs/checkpoints/my_experiment
 
 model:
   type: resnet50
