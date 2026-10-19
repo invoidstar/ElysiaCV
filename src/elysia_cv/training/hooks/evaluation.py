@@ -23,6 +23,8 @@ class EvalHook(Hook):
         eval_freq: int = 5000,
         metrics: list | None = None,
         save_best_metric: str | None = None,
+        ema: Any = None,
+        metric_history: Any = None,
     ) -> None:
         self.dataloader = dataloader
         self.eval_freq = eval_freq
@@ -37,6 +39,8 @@ class EvalHook(Hook):
 
         self.save_best_metric = save_best_metric
         self._best_value = -float("inf")
+        self._ema = ema  # ModelEMA instance for weight swapping
+        self._metric_history = metric_history  # MetricHistory for curve plotting
 
     def after_step(self, loop) -> None:
         step = loop.state.global_step
@@ -45,9 +49,19 @@ class EvalHook(Hook):
 
         model = loop.model
         raw_model = unwrap_model(model)
+
+        # Swap to EMA weights for evaluation (if available)
+        if self._ema is not None:
+            self._ema.apply_shadow(raw_model)
+
         raw_model.eval()
 
-        results = self._evaluate(raw_model, loop.device)
+        try:
+            results = self._evaluate(raw_model, loop.device)
+        finally:
+            # Restore training weights
+            if self._ema is not None:
+                self._ema.restore(raw_model)
 
         # Primary metric: use save_best_metric if configured, else first numeric result
         primary = 0.0
@@ -55,6 +69,10 @@ class EvalHook(Hook):
             primary = results[self.save_best_metric]
         elif results:
             primary = next((v for v in results.values() if isinstance(v, (int, float)) and v > 0), 0.0)
+
+        # Record eval results for training-curve plotting
+        if self._metric_history is not None:
+            self._metric_history.record(step, results)
 
         raw_model.train()
 

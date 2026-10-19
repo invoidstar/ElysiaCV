@@ -44,7 +44,7 @@ configs/
 | `engine.distributed` | DDP 默认参数（bucket_cap_mb=64, gradient_as_bucket_view=true） |
 | `engine.precision` | CUDA 后端配置（cudnn.benchmark=true, allow_tf32=true） |
 | `engine.compile` | torch.compile 默认关闭 |
-| `engine.optimization` | gradient_accumulation_steps=1 |
+| `engine.optimization` | gradient_accumulation_steps=1, ema_enable=false, ema_decay=0.9999 |
 | `engine.strategy` | ddp / fsdp / single |
 | `tracking` | log_freq=50, wandb 关闭 |
 | `run` | seed=42, test_run=false |
@@ -107,6 +107,30 @@ run:
 optim: {type: AdamW, params: {lr: 0.001}}
 schedule: {type: CosineAnnealing, steps: 10000}
 eval: {eval_freq: 1000, metrics: [{type: Accuracy}]}
+```
+
+### 启用训练技巧
+
+```yaml
+# Model EMA（引擎自动启用）
+engine:
+  optimization:
+    ema_enable: true
+    ema_decay: 0.9999
+
+# 数据增强（per-sample + batch 级）
+data:
+  train:
+    transforms:
+      - {type: LoadImageFromFile}
+      - {type: Resize, size: 224}
+      - {type: RandomRotation, degrees: 10, prob: 0.5}
+      - {type: RandomFlip, prob: 0.5}
+      - {type: Normalize}
+      - {type: PackInputs}
+    batch_transforms:
+      - {type: MixUp, alpha: 0.2, prob: 0.5}
+      - {type: CutMix, alpha: 1.0, prob: 0.5}
 ```
 
 ### 单文件

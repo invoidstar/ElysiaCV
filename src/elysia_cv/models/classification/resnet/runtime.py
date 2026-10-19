@@ -63,12 +63,17 @@ def forward_train(
     """Run one training forward pass; returns ``loss`` + per-objective losses.
 
     Expects batch keys: ``inputs`` (images), ``gt_label`` (class labels).
+    Supports MixUp via ``gt_label_soft`` (soft one-hot targets).
     """
+    import torch.nn.functional as F
     images = batch["inputs"]
     labels = batch.get("gt_label")
-    if labels is not None:
-        if hasattr(labels, "to") and device is not None:
-            labels = labels.to(device, non_blocking=True)
+    if labels is not None and hasattr(labels, "to") and device is not None:
+        labels = labels.to(device, non_blocking=True)
+
+    labels_soft = batch.get("gt_label_soft")
+    if labels_soft is not None and hasattr(labels_soft, "to") and device is not None:
+        labels_soft = labels_soft.to(device, non_blocking=True)
 
     if device is not None:
         images = images.to(device, non_blocking=True)
@@ -76,12 +81,20 @@ def forward_train(
     outputs = model(images)
     logits = outputs["logits"]
 
-    loss_fn = LOSSES.build({"type": "CrossEntropyLoss"})
-    loss = loss_fn(logits, labels)
+    # Loss: soft CE for MixUp, standard CE otherwise
+    if labels_soft is not None:
+        log_probs = F.log_softmax(logits, dim=1)
+        loss = -(labels_soft * log_probs).sum(dim=1).mean()
+        # Accuracy uses original hard labels
+        labels_for_acc = batch.get("gt_label_orig", labels)
+    else:
+        loss_fn = LOSSES.build({"type": "CrossEntropyLoss"})
+        loss = loss_fn(logits, labels)
+        labels_for_acc = labels
 
     # Compute accuracy for logging
     pred = logits.argmax(dim=1)
-    acc = (pred == labels).float().mean()
+    acc = (pred == labels_for_acc).float().mean()
 
     return {
         "loss": loss,

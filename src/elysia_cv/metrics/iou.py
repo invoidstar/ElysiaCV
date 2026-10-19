@@ -199,7 +199,112 @@ class MeanAP(nn.Module):
         idx_75 = 5  # 0.50 + 5*0.05 = 0.75
         mAP_75 = aps[idx_75] if idx_75 < len(aps) else mAP
 
+        # Store per-class PR data for later plotting
+        self._last_pr_data: dict[str, list[Any]] | None = None
+
         return {"mAP": mAP, "mAP_50": mAP_50, "mAP_75": mAP_75}
+
+    # ------------------------------------------------------------------
+    # PR curve data extraction
+    # ------------------------------------------------------------------
+
+    def get_pr_data(self, iou_thr: float = 0.5) -> dict[str, list[float]]:
+        """Extract per-class precision/recall curves for plotting.
+
+        Must be called **after** ``compute()`` (which processes the
+        accumulated data).  Returns a dict keyed by class ID with lists
+        of ``[precision_values, recall_values]``.
+
+        Args:
+            iou_thr: IoU threshold for the PR curves (default 0.50).
+
+        Returns:
+            ``{cls_id: [precisions, recalls]}`` where each value is a
+            list of 101 floats (interpolated to 101 recall levels).
+        """
+        import numpy as np
+
+        from elysia_cv.metrics.iou import _box_iou
+
+        result: dict[str, Any] = {}
+        for cls_id in range(self.num_classes):
+            # Collect all predictions for this class
+            all_scores = []
+            all_det_img = []
+            all_det_boxes = []
+
+            for img_idx, pred in enumerate(self._all_preds):
+                mask = pred["labels"] == cls_id
+                if not mask.any():
+                    continue
+                indices = mask.nonzero(as_tuple=True)[0]
+                for j in indices:
+                    all_scores.append(pred["scores"][j].item())
+                    all_det_img.append(img_idx)
+                    all_det_boxes.append(pred["boxes"][j].numpy())
+
+            # Count GT instances and build matched list
+            gt_boxes_per_img: list[list[np.ndarray]] = []
+            gt_matched_per_img: list[list[bool]] = []
+            for gt_item in self._all_gts:
+                gt_mask = gt_item["labels"] == cls_id
+                if gt_mask.any():
+                    indices = gt_mask.nonzero(as_tuple=False)
+                    boxes = [gt_item["boxes"][idx].numpy() for idx in indices.squeeze(-1)]
+                else:
+                    boxes = []
+                gt_boxes_per_img.append(boxes)
+                gt_matched_per_img.append([False] * len(boxes))
+
+            npos = sum(len(b) for b in gt_boxes_per_img)
+            if npos == 0 or not all_scores:
+                continue
+
+            # Sort by score descending
+            scores_arr = np.array(all_scores)
+            order = np.argsort(scores_arr)[::-1]
+
+            tp = np.zeros(len(order), dtype=np.float32)
+            fp = np.zeros(len(order), dtype=np.float32)
+
+            for rank, ord_idx in enumerate(order):
+                img_idx = all_det_img[ord_idx]
+                det_box = all_det_boxes[ord_idx]
+                gt_boxes = gt_boxes_per_img[img_idx]
+                matched = gt_matched_per_img[img_idx]
+
+                best_iou = 0.0
+                best_j = -1
+                for j, gt_box in enumerate(gt_boxes):
+                    if matched[j]:
+                        continue
+                    iou_val = _box_iou_np(det_box, gt_box)
+                    if iou_val > best_iou:
+                        best_iou = iou_val
+                        best_j = j
+
+                if best_iou >= iou_thr and best_j >= 0:
+                    tp[rank] = 1.0
+                    matched[best_j] = True
+                else:
+                    fp[rank] = 1.0
+
+            # Cumulative
+            tp_cum = np.cumsum(tp)
+            fp_cum = np.cumsum(fp)
+            prec = tp_cum / np.maximum(tp_cum + fp_cum, np.finfo(np.float32).eps)
+            rec = tp_cum / npos
+
+            # 101-point interpolation
+            recall_levels = np.linspace(0, 1, 101)
+            prec_at_rec = np.zeros(101)
+            for i, r in enumerate(recall_levels):
+                mask_r = rec >= r
+                prec_at_rec[i] = prec[mask_r].max() if mask_r.any() else 0.0
+
+            result[str(cls_id)] = [prec_at_rec.tolist(), recall_levels.tolist()]
+
+        return result
 
     # ------------------------------------------------------------------
     # Internal AP computation (11-point interpolation)
@@ -283,6 +388,18 @@ class MeanAP(nn.Module):
                 ap += float(np.max(prec[rec >= t]))
         ap /= 101.0
         return ap
+
+
+def _box_iou_np(box_a: np.ndarray, box_b: np.ndarray) -> float:
+    """Compute IoU between two single boxes (NumPy, xyxy format)."""
+    x1 = max(box_a[0], box_b[0])
+    y1 = max(box_a[1], box_b[1])
+    x2 = min(box_a[2], box_b[2])
+    y2 = min(box_a[3], box_b[3])
+    inter = max(0, x2 - x1) * max(0, y2 - y1)
+    area_a = (box_a[2] - box_a[0]) * (box_a[3] - box_a[1])
+    area_b = (box_b[2] - box_b[0]) * (box_b[3] - box_b[1])
+    return inter / (area_a + area_b - inter + 1e-6)
 
 
 def _box_iou(boxes_a: torch.Tensor, boxes_b: torch.Tensor) -> torch.Tensor:

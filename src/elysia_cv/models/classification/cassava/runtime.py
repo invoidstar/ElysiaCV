@@ -79,7 +79,13 @@ class CassavaModel(nn.Module):
         self.head = head
         self._loss_cfg: dict[str, Any] = {"type": "FocalLoss", "alpha": 0.25, "gamma": 2.0}
 
-    def forward(self, x: torch.Tensor, gt_label: torch.Tensor | None = None) -> dict[str, torch.Tensor]:
+    def forward(
+        self,
+        x: torch.Tensor,
+        gt_label: torch.Tensor | None = None,
+        gt_label_soft: torch.Tensor | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
         feats = self.backbone(x)
 
         if self.neck is not None:
@@ -94,12 +100,21 @@ class CassavaModel(nn.Module):
         else:
             raise RuntimeError("CassavaModel: neither neck nor head is configured.")
 
-        if gt_label is not None:
+        if gt_label is not None or gt_label_soft is not None:
             # ── Training path
-            loss_fn = LOSSES.build(self._loss_cfg)
-            loss = loss_fn(logits, gt_label)
+            import torch.nn.functional as F
+            if gt_label_soft is not None:
+                # MixUp: soft CE loss
+                log_probs = F.log_softmax(logits, dim=1)
+                loss = -(gt_label_soft * log_probs).sum(dim=1).mean()
+                labels_for_acc = kwargs.get("gt_label_orig", gt_label)
+            else:
+                loss_fn = LOSSES.build(self._loss_cfg)
+                loss = loss_fn(logits, gt_label)
+                labels_for_acc = gt_label
+
             pred = logits.argmax(dim=1)
-            acc = (pred == gt_label).float().mean()
+            acc = (pred == labels_for_acc).float().mean()
             return {
                 "loss": loss,
                 "logits": logits,

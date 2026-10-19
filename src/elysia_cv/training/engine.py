@@ -26,6 +26,8 @@ from elysia_cv.training.hooks.logger import LoggerHook
 from elysia_cv.training.hooks.checkpoint import CheckpointHook
 from elysia_cv.training.hooks.lr_scheduler import LrSchedulerHook
 from elysia_cv.training.hooks.evaluation import EvalHook
+from elysia_cv.training.hooks.metric_history import MetricHistory
+from elysia_cv.training.ema import ModelEMA, EMAHook
 from elysia_cv.optim.optimizers import build_optimizer
 from elysia_cv.optim.schedulers import build_scheduler
 
@@ -128,13 +130,31 @@ class TrainingEngine:
             log_freq=self.config.tracking.log_freq,
             total_steps=self.config.schedule.steps,
         ))
+        # 8. MetricHistory + EvalHook
+        metric_history = MetricHistory(output_dir=self.config.run.output_dir)
+        hooks.register(metric_history)
+
         if val_loader is not None:
             hooks.register(EvalHook(
                 dataloader=val_loader,
                 eval_freq=self.config.eval.eval_freq,
                 metrics=self.config.eval.metrics,
                 save_best_metric=self.config.eval.save_best,
+                ema=ema,
+                metric_history=metric_history,
             ))
+
+        # 7.5. Model EMA (optional)
+        ema: ModelEMA | None = None
+        if self.config.engine.optimization.ema_enable:
+            ema = ModelEMA(
+                model,
+                decay=self.config.engine.optimization.ema_decay,
+            )
+            hooks.register(EMAHook(ema))
+
+        # 7.6. Batch transforms (MixUp etc.) — built from data config
+        batch_transforms = self._build_batch_transforms()
 
         # 8. Build cadence
         cadence = CadenceController(
@@ -156,6 +176,7 @@ class TrainingEngine:
             cadence=cadence,
             autocast_ctx=autocast_ctx,
             grad_scaler=grad_scaler,
+            batch_transforms=batch_transforms,
         )
 
         # 9.5. Resume from checkpoint if requested
@@ -184,6 +205,15 @@ class TrainingEngine:
         if self._build_train_loader_fn is not None:
             return self._build_train_loader_fn()
         return _build_loader_from_config(self.config.data.train, self.config)
+
+    def _build_batch_transforms(self) -> list:
+        """Build batch-level transforms (MixUp etc.) from data config."""
+        train_cfg = self.config.data.train
+        batch_cfg = getattr(train_cfg, "batch_transforms", None)
+        if batch_cfg is None:
+            return []
+        from elysia_cv.data.transforms import build_batch_pipeline
+        return build_batch_pipeline(list(batch_cfg))
 
     def _build_val_loader(self) -> Any | None:
         """Build validation DataLoader from config, or use injected function."""

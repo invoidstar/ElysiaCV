@@ -112,6 +112,7 @@ class _DataSubSection:
     persistent_workers: bool = True
     drop_last: bool = False
     transforms: list[dict[str, Any]] = field(default_factory=list)
+    batch_transforms: list[dict[str, Any]] = field(default_factory=list)
 
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, Any]) -> "_DataSubSection":
@@ -127,6 +128,7 @@ class _DataSubSection:
             persistent_workers=bool(loader.get("persistent_workers", True)),
             drop_last=bool(loader.get("drop_last", False)),
             transforms=list(mapping.get("transforms") or []),
+            batch_transforms=list(mapping.get("batch_transforms") or []),
         )
 
 
@@ -229,6 +231,8 @@ class _OptSubSection:
     gradient_accumulation_steps: int = 1
     grad_clip_norm: float | None = None
     optimizer_zero_grad_set_to_none: bool = True
+    ema_enable: bool = False
+    ema_decay: float = 0.9999
 
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, Any]) -> "_OptSubSection":
@@ -236,6 +240,8 @@ class _OptSubSection:
             gradient_accumulation_steps=int(mapping.get("gradient_accumulation_steps", 1)),
             grad_clip_norm=_optional_float(mapping.get("grad_clip_norm")),
             optimizer_zero_grad_set_to_none=bool(mapping.get("optimizer_zero_grad_set_to_none", True)),
+            ema_enable=bool(mapping.get("ema_enable", False)),
+            ema_decay=float(mapping.get("ema_decay", 0.9999)),
         )
 
 

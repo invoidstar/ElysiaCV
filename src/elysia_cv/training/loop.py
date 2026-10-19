@@ -39,6 +39,7 @@ class TrainerLoop:
         grad_clip_norm: float | None = None,
         autocast_ctx: Any = None,
         grad_scaler: Any = None,
+        batch_transforms: list | None = None,
     ) -> None:
         self.model = model
         self.optimizer = optimizer
@@ -54,6 +55,7 @@ class TrainerLoop:
         self._data_iter = iter(dataloader)
         self._autocast_ctx = autocast_ctx  # torch.amp.autocast or nullcontext
         self._grad_scaler = grad_scaler    # torch.cuda.amp.GradScaler or None
+        self._batch_transforms = batch_transforms or []
 
     def run(self) -> None:
         """Execute the full training loop."""
@@ -96,6 +98,10 @@ class TrainerLoop:
             except StopIteration:
                 self._data_iter = iter(self.dataloader)
                 batch = next(self._data_iter)
+
+            # Apply batch-level transforms (MixUp etc.)
+            for bt in self._batch_transforms:
+                batch = bt(batch)
 
             # Determine sync
             is_sync = self.strategy.is_sync_step(micro_idx)
@@ -147,7 +153,7 @@ class TrainerLoop:
         are unpacked as kwargs; metadata keys like ``img_path`` / ``image_id``
         are silently dropped to avoid ``TypeError``.
         """
-        _KNOWN_LABEL_KEYS = {"gt_label", "gt_bboxes", "gt_semantic_seg", "gt_masks", "labels"}
+        _KNOWN_LABEL_KEYS = {"gt_label", "gt_label_soft", "gt_bboxes", "gt_semantic_seg", "gt_masks", "labels"}
 
         autocast = self._autocast_ctx if self._autocast_ctx is not None else _nullcontext()
 

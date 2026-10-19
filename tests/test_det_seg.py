@@ -66,7 +66,12 @@ class TestDetectionPipeline:
         model = build_model(cfg)
 
         x = torch.randn(2, 3, 224, 224)
-        batch = {"inputs": x, "gt_labels": [torch.randint(0, 20, (3,))]}
+        # Provide mock bboxes (xyxy format, variable per image)
+        batch = {
+            "inputs": x,
+            "gt_bboxes": [torch.rand(3, 4) * 200 for _ in range(2)],
+            "gt_labels": [torch.randint(0, 20, (3,)) for _ in range(2)],
+        }
 
         result = forward_train(model, batch)
         assert "loss" in result
@@ -203,7 +208,11 @@ class TestSegmentationPipeline:
             (
                 self._build_det,
                 self._det_forward,
-                lambda: {"inputs": torch.randn(3, 224, 224)},
+                lambda: {
+                    "inputs": torch.randn(3, 224, 224),
+                    "gt_bboxes": torch.rand(2, 4) * 200,
+                    "gt_labels": torch.randint(0, 5, (2,)),
+                },
                 None,
             ),
             (

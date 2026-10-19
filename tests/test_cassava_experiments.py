@@ -115,6 +115,7 @@ class TestModelRegistry:
             "cassava_mlp", "cassava_simple_cnn",
             "cassava_resnet18", "cassava_resnet34", "cassava_resnet50",
             "cassava_vit_b16", "cassava_vit_l16",
+            "cassava_herbs_swin_base", "cassava_herbs_swin_tiny",
         }
         assert spec_names == expected
 

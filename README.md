@@ -14,6 +14,7 @@
     <a href="pyproject.toml"><img src="docs/assets/readme/badge-pytorch.svg" height="28" alt="Backend PyTorch" /></a>
     <a href="docs/status/current.md"><img src="docs/assets/readme/badge-version.svg" height="28" alt="Version 0.2.0 Alpha" /></a>
     <a href="LICENSE"><img src="docs/assets/readme/badge-license.svg" height="28" alt="Apache-2.0 License" /></a>
+    <a href=".github/workflows/ci.yml"><img src="https://github.com/invoidstar/ElysiaCV/actions/workflows/ci.yml/badge.svg" height="28" alt="CI status" /></a>
   </p>
 
   <p>
@@ -61,13 +62,13 @@
       <p>围绕 CVConfig、日志、Checkpoint 和指标收集组织运行过程。支持 <code>--resume</code> 断点续训。</p>
     </td>
     <td valign="top">
-      <h3>06 · 开发者体验</h3>
-      <p>MessageHub 状态总线、EMA 日志平滑、DataPrefetcher 异步预取、<code>elysia config dump</code> 完整配置展开。</p>
+      <h3>06 · 现代化训练技巧</h3>
+      <p>Model EMA 权重平均、MixUp/CutMix/Mosaic 数据增强、PR 曲线、训练曲线自动记录。</p>
     </td>
   </tr>
 </table>
 
-> **当前阶段：v0.2.0 · Alpha / 工程原型。** 分类、检测 (FCOS-style)、语义分割（FCN）三类任务均已完成真实端到端训练闭环，包含真损失函数、COCO 标准 mAP 指标、COCO 数据集加载和 `data/` 变换管线。详细的模块完成状态见 [当前工程状态](docs/status/current.md)。
+> **当前阶段：v0.2.0 · Alpha / 工程原型。** 分类、检测 (FCOS-style)、语义分割（FCN）三类任务均已完成真实端到端训练闭环，包含真损失函数、COCO 标准 mAP 指标、COCO 数据集加载和 `data/` 变换管线。163 个测试，52% 代码覆盖率。GitHub Actions CI 自动化 lint + test + coverage。详细的模块完成状态见 [当前工程状态](docs/status/current.md)。
 
 <a id="vision-tasks"></a>
 ## Vision tasks · 从图像理解到像素级预测
@@ -96,7 +97,7 @@
 | **Model Plugins** | 声明模型规格，构建模型并定义专属训练 / 测试前向。 | [`models/`](src/elysia_cv/models/) |
 | **Component Registry** | 注册与组装可复用模型零件、损失函数和评测指标。 | [`core/registry.py`](src/elysia_cv/core/registry.py) · [`components/`](src/elysia_cv/components/) |
 | **Training Engine** | 组织训练循环、分布式执行（DDP/FSDP）、调度、Hook 与 Checkpoint。 | [`training/`](src/elysia_cv/training/) |
-| **Data Pipeline** | COCO/ImageFolder 数据集、变换管线 (Compose)、采样器和异步预取。 | [`data/`](src/elysia_cv/data/) |
+| **Data Pipeline** | COCO/ImageFolder 数据集、per-sample 与 batch 级变换管线、采样器和异步预取。 | [`data/`](src/elysia_cv/data/) |
 
 **模型插件**负责"如何构建模型、如何定义任务 Loss"；**共享引擎**负责"何时迭代、何时更新权重、何时记录或保存"。更详细的设计见 [架构合同](docs/infrastructure/architecture.md)。
 
@@ -107,7 +108,7 @@
 
 配置与模型规范进入训练计划，Task Runtime 负责前向及 Loss，训练循环管理更新策略，Hook 负责日志、评估与 Checkpoint。ElysiaCV 将这几项职责分开，是为了允许模型替换，而不需要重写外围工程。
 
-现有训练实现包含梯度累积、DDP·FSDP 同步策略、MetricsRuntime 与多种 Hook（Logger/Checkpoint/Eval/LrScheduler）；它们是**可复用的工程模块**。详见 [性能指南](docs/infrastructure/performance.md)。
+现有训练实现包含梯度累积、DDP·FSDP 同步策略、Model EMA、MetricsRuntime 与多种 Hook（Logger/Checkpoint/Eval/LrScheduler/ModelEMA/MetricHistory）；它们是**可复用的工程模块**。详见 [性能指南](docs/infrastructure/performance.md)。
 
 <a id="quick-start"></a>
 ## Quick start · 从仓库和配置入口开始
@@ -164,7 +165,7 @@ elysia config dump configs/detection/fcos_resnet50_coco.yaml
 | Plugin | 任务 | 已有规格或组件 |
 | --- | --- | --- |
 | [`resnet`](src/elysia_cv/models/classification/resnet/) | Classification | ResNet-18 / 34 / 50 / 101 |
-| [`cassava`](src/elysia_cv/models/classification/cassava/) | Classification | MLP、SimpleCNN、ResNet-18/34/50、ViT-B/16、ViT-L/16 |
+| [`cassava`](src/elysia_cv/models/classification/cassava/) | Classification | MLP、SimpleCNN、ResNet-18/34/50、ViT-B/16、ViT-L/16、Swin-T/B |
 | [`fcos`](src/elysia_cv/models/detection/fcos/) | Detection | FCOS-style anchor-free，ResNet + FPN + DetHead，真损失 + NMS + COCO mAP |
 | [`fcn`](src/elysia_cv/models/segmentation/fcn/) | Segmentation | ResNet-50/101 + SegHead，CE / Dice 损失，MeanIoU |
 
@@ -172,12 +173,16 @@ elysia config dump configs/detection/fcos_resnet50_coco.yaml
 
 | 模块 | 代表性实现 |
 | --- | --- |
-| **Backbones** | MLP · SimpleCNN · ResNet · ViT |
+| **Backbones** | MLP · SimpleCNN · ResNet · ViT · Swin |
 | **Necks & Heads** | FPN · IdentityNeck · LinearClsHead · ClsHead · DetHead · SegHead |
 | **Losses & Metrics** | CrossEntropy · Focal · SmoothL1 · IoU/GIoU · Dice · Accuracy · MeanIoU · MeanAP (COCO-standard) |
-| **Optimization** | SGD · AdamW · Adam · RMSprop + MultiStepLR / CosineAnnealing / StepLR / ReduceLROnPlateau / ConstantLR · Warmup |
-| **Training Hooks** | Logger (EMA) · Checkpoint · Evaluation · LR Scheduler · MessageHub |
-| **Data Pipeline** | Compose transforms · COCO dataset · ImageFolder · DataPrefetcher (async GPU) |
+| **优化 & 调度** | SGD · AdamW · Adam · RMSprop + MultiStepLR / CosineAnnealing / StepLR / ReduceLROnPlateau / ConstantLR · Warmup |
+| **训练技巧** | Model EMA (影子权重) · 梯度累积 · 混合精度 (AMP/bf16) · 梯度裁剪 |
+| **数据增强** | RandomFlip · ColorJitter · RandomErasing · PhotoMetricDistortion · RandomRotation · RandomAffine · **MixUp** · **CutMix** · **Mosaic** (检测) |
+| **Training Hooks** | Logger (EMA平滑) · Checkpoint · Evaluation · LR Scheduler · ModelEMA · MetricHistory |
+| **Data Pipeline** | Compose transforms (per-sample + batch) · COCO dataset · ImageFolder · DataPrefetcher (async GPU) |
+| **可视化 & 分析** | `draw_bboxes` · `draw_segmentation_overlay` · `draw_gt_pred_comparison` (GT vs 预测对比) · `plot_pr_curves` (per-class PR 曲线) · 训练曲线 (`MetricHistory`) · 混淆矩阵 · GradCAM |
+| **CI/CD** | GitHub Actions: lint (ruff) + test (py3.10/3.11) + coverage (≥30%, artifact upload) |
 
 完整的插件发现、模型接口及扩展步骤见 [扩展指南](docs/guides/extension.md)。
 
@@ -189,7 +194,8 @@ elysia config dump configs/detection/fcos_resnet50_coco.yaml
 | **P1 · 核心闭环** | AMP 混合精度、`elysia test`/`infer` CLI、METRICS 注册表、Cassava 解耦。 | ✅ |
 | **P2 · 多任务支持** | COCO 数据加载、真检测训练（FCOS 风格）、真 COCO mAP、分类/检测/分割训练闭环。 | ✅ |
 | **P3 · 开发者体验** | `--resume` 断点续训、MessageHub 状态总线、EMA 日志平滑、DataPrefetcher、`config dump`、`set_epoch()`。 | ✅ |
-| **P4 · 模型生态** | 模型动物园扩展、ONNX/TorchScript 导出、TTA、CI/CD。 | 🔜 计划中 |
+| **P4 · 质量修补** | fcos 重命名、detection config 校验、Data Adapter、优化器扩展、tools、可视化、FSDP。 | ✅ |
+| **P5 · 训练生态** | Model EMA、MixUp/CutMix/Mosaic、RandomRotation/RandomAffine、PR 曲线、训练曲线、GT vs Pred 可视化、CI/CD、163 tests、52% coverage。 | ✅ |
 
 状态更新以 [`docs/status/current.md`](docs/status/current.md) 为准。
 
@@ -204,6 +210,7 @@ elysia config dump configs/detection/fcos_resnet50_coco.yaml
 | 如何使用训练配置与 Checkpoint | [训练指南](docs/guides/training.md) |
 | 如何增加自己的模型和组件 | [模型扩展指南](docs/guides/extension.md) |
 | 训练性能与分布式设计 | [性能指南](docs/infrastructure/performance.md) |
+| 版本变更历史 | [CHANGELOG](CHANGELOG.md) |
 
 完整文档导航：[`docs/README.md`](docs/README.md)。
 
@@ -212,24 +219,25 @@ elysia config dump configs/detection/fcos_resnet50_coco.yaml
 
 ```text
 ElysiaCV/
-├── configs/                  # 分类 / 检测 / 分割 YAML
-├── docs/                     # 指南、架构、状态、README 插画
-│   └── assets/readme/        # 本地 SVG 图形资源
+├── .github/workflows/ci.yml   # CI: lint + test + coverage
+├── configs/                   # 分类 / 检测 / 分割 YAML
+├── docs/                      # 指南、架构、状态、README 插画
+│   └── assets/readme/         # 本地 SVG 图形资源
 ├── src/elysia_cv/
-│   ├── core/                 # Plugin、Registry 与 API 合同
-│   ├── config/               # YAML 解析、校验与配置对象
-│   ├── data/                 # Dataset / Dataloader / Transforms / Prefetcher
-│   ├── models/               # 各任务模型插件与 Runtime
-│   ├── components/           # Backbone / Neck / Head
-│   ├── losses/               # 注册式 Loss
-│   ├── metrics/              # 注册式 Metric (MeanAP, MeanIoU, Accuracy)
-│   ├── training/             # Engine、Loop、Hooks、DDP、MessageHub
-│   ├── optim/                # Optimizer 与 Scheduler
-│   └── utils/                # 通用工具
-├── tools/                    # Train / Test / Infer CLI 薄壳入口
-├── scripts/                  # 实验辅助脚本
-├── tests/                    # 配置、组件、模型与训练测试
-└── pyproject.toml            # 依赖、打包与 CLI 声明
+│   ├── core/                  # Plugin、Registry 与 API 合同
+│   ├── config/                # YAML 解析、校验与配置对象
+│   ├── data/                  # Dataset / Dataloader / Transforms / Prefetcher
+│   ├── models/                # 各任务模型插件与 Runtime
+│   ├── components/            # Backbone / Neck / Head
+│   ├── losses/                # 注册式 Loss
+│   ├── metrics/               # 注册式 Metric (MeanAP, MeanIoU, Accuracy)
+│   ├── training/              # Engine、Loop、Hooks、DDP、EMA、MessageHub
+│   ├── optim/                 # Optimizer 与 Scheduler
+│   └── utils/                 # 可视化等工具
+├── tools/                     # Train / Test / Infer CLI 薄壳入口
+├── scripts/                   # 实验辅助脚本
+├── tests/                     # 163 个 pytest 测试（10 套文件）
+└── pyproject.toml             # 依赖、打包与 CLI 声明
 ```
 
 </details>

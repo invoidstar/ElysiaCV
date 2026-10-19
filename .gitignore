@@ -16,11 +16,18 @@ env/
 *.swp
 *.swo
 
+# Project experiments (don't upload experiment-specific code/data)
+projects/
+
 # ML / Training outputs
-outputs/checkpoints/
+outputs/
 *.pt
 *.pth
 *.ckpt
+
+# Coverage
+.coverage
+htmlcov/
 
 # Data
 /data/

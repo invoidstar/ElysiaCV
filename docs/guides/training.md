@@ -80,17 +80,76 @@ data:       # 数据源 + 预处理
   train:
     dataset_root: /data/imagenet/train
     batch_size: 256
-    transforms: [...]
+    transforms: [...]        # per-sample 变换（Normalize, Resize, RandomFlip...）
+    batch_transforms: [...]  # batch 级变换（MixUp, CutMix, Mosaic...）
   val:
     dataset_root: /data/imagenet/val
     batch_size: 64
     transforms: [...]
-engine:     # 训练策略 (DDP / precision / compile / optimization)
+engine:     # 训练策略 (DDP / precision / compile / optimization / EMA)
 optim:      # 优化器 (type + params)
 schedule:   # 学习率策略 (type + steps + warmup)
 tracking:   # 日志 / W&B
 eval:       # 评测频率 + 指标
 ```
+
+---
+
+## 训练技巧
+
+### Model EMA（指数滑动平均）
+
+在训练时维护一份模型权重的指数滑动平均，评测时自动切换到 EMA 权重，通常可提升 0.5-1% 精度。
+
+```yaml
+engine:
+  optimization:
+    ema_enable: true       # 启用
+    ema_decay: 0.9999      # 衰减系数（可选，默认 0.9999）
+```
+
+### 数据增强
+
+**Per-sample 变换**（对每张图独立应用）：
+
+| 变换 | 说明 | 配置示例 |
+|------|------|----------|
+| RandomFlip | 随机水平/垂直翻转 | `{type: RandomFlip, prob: 0.5}` |
+| ColorJitter | 亮度/对比度/饱和度/色调 | `{type: ColorJitter, brightness: 0.2}` |
+| RandomRotation | 旋转 ±N 度 + bbox 同步 | `{type: RandomRotation, degrees: 10}` |
+| RandomAffine | 平移/缩放/剪切 + bbox 同步 | `{type: RandomAffine, translate: [0.1,0.1], scale: [0.9,1.1]}` |
+| RandomErasing | 随机擦除矩形区域 | `{type: RandomErasing, prob: 0.3}` |
+
+**Batch 级变换**（对整个 batch 操作，混合同 batch 的样本）：
+
+| 变换 | 说明 | 适用任务 | 配置示例 |
+|------|------|----------|----------|
+| MixUp | 两图线性插值，标签按比例混合 | 分类 | `{type: MixUp, alpha: 0.2, prob: 0.5}` |
+| CutMix | 裁切一块贴到另一张图 | 分类 | `{type: CutMix, alpha: 1.0, prob: 0.5}` |
+| Mosaic | 4 图拼 1 图，bbox 同步 | 检测 | `{type: Mosaic, output_size: [640, 640], prob: 0.5}` |
+
+完整配置示例：
+
+```yaml
+data:
+  train:
+    transforms:
+      - {type: LoadImageFromFile}
+      - {type: Resize, size: 224}
+      - {type: RandomRotation, degrees: 10, prob: 0.5}
+      - {type: RandomFlip, prob: 0.5}
+      - {type: Normalize}
+      - {type: PackInputs}
+    batch_transforms:
+      - {type: MixUp, alpha: 0.2, prob: 0.5}
+      - {type: CutMix, alpha: 1.0, prob: 0.3}
+```
+
+### 训练曲线自动记录
+
+`MetricHistory` Hook 自动记录每个 eval step 的指标值，训练结束时生成 `analysis/training_curves.png`。
+
+无需配置 — 引擎自动启用。
 
 ---
 
@@ -168,4 +227,19 @@ engine:
 
 # 方法 3: 使用混合精度
 --set engine.precision.mixed_precision=true
+```
+
+### 如何查看训练过程中的指标曲线
+
+训练结束后会自动在 `outputs/<name>/analysis/training_curves.png` 生成曲线。也可以在训练过程中直接打开该文件（每轮 eval 后更新一次）。
+
+### 如何生成检测的 PR 曲线
+
+```python
+from elysia_cv.metrics.iou import MeanAP
+from elysia_cv.utils.visualization import plot_pr_curves
+
+# metric.compute() 之后
+pr_data = metric.get_pr_data(iou_thr=0.5)
+plot_pr_curves(pr_data, "analysis/pr_curves.png", class_names=coco_names)
 ```

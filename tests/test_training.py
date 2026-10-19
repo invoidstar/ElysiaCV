@@ -159,7 +159,9 @@ class TestFullPipeline:
             mock_loop.model = nn.Linear(10, 2)
             mock_loop.optimizer = torch.optim.SGD(mock_loop.model.parameters(), lr=0.01)
             mock_loop.device = torch.device("cpu")
-            mock_loop.callbacks = None
+            class _MockHookBus:
+                _hooks = []
+            mock_loop.callback = _MockHookBus()
 
             class _State:
                 global_step = 0
