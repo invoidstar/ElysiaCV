@@ -68,7 +68,7 @@
   </tr>
 </table>
 
-> **当前阶段：v0.2.0 · Alpha / 工程原型。** 分类、检测 (FCOS-style)、语义分割（FCN）三类任务均已完成真实端到端训练闭环，包含真损失函数、COCO 标准 mAP 指标、COCO 数据集加载和 `data/` 变换管线。163 个测试，52% 代码覆盖率。GitHub Actions CI 自动化 lint + test + coverage。详细的模块完成状态见 [当前工程状态](docs/status/current.md)。
+> **当前阶段：v0.3.0 · Alpha / 工程原型。** 分类、检测 (FCOS-style)、语义分割（FCN）三类任务均已完成真实端到端训练闭环，包含真损失函数、COCO 标准 mAP 指标、COCO 数据集加载和 `data/` 变换管线。内置 ADE20K/Cityscapes 分割数据集、EarlyStopping、SWA、TTA、ClassBalancedSampler、CachedDataset 数据缓存、`tools/profile.py` FLOPs 分析。163 个测试，52% 代码覆盖率。GitHub Actions CI 自动化 lint + test + coverage。详细的模块完成状态见 [当前工程状态](docs/status/current.md)。
 
 <a id="vision-tasks"></a>
 ## Vision tasks · 从图像理解到像素级预测
@@ -177,11 +177,13 @@ elysia config dump configs/detection/fcos_resnet50_coco.yaml
 | **Necks & Heads** | FPN · IdentityNeck · LinearClsHead · ClsHead · DetHead · SegHead |
 | **Losses & Metrics** | CrossEntropy · Focal · SmoothL1 · IoU/GIoU · Dice · Accuracy · MeanIoU · MeanAP (COCO-standard) |
 | **优化 & 调度** | SGD · AdamW · Adam · RMSprop + MultiStepLR / CosineAnnealing / StepLR / ReduceLROnPlateau / ConstantLR · Warmup |
-| **训练技巧** | Model EMA (影子权重) · 梯度累积 · 混合精度 (AMP/bf16) · 梯度裁剪 |
+| **训练技巧** | Model EMA (影子权重) · SWA (周期平均) · EarlyStopping (自动终止) · TTA (multi-scale + flip 投票) · 梯度累积 · 混合精度 (AMP/bf16) · 梯度裁剪 |
 | **数据增强** | RandomFlip · ColorJitter · RandomErasing · PhotoMetricDistortion · RandomRotation · RandomAffine · **MixUp** · **CutMix** · **Mosaic** (检测) |
-| **Training Hooks** | Logger (EMA平滑) · Checkpoint · Evaluation · LR Scheduler · ModelEMA · MetricHistory |
-| **Data Pipeline** | Compose transforms (per-sample + batch) · COCO dataset · ImageFolder · DataPrefetcher (async GPU) |
-| **可视化 & 分析** | `draw_bboxes` · `draw_segmentation_overlay` · `draw_gt_pred_comparison` (GT vs 预测对比) · `plot_pr_curves` (per-class PR 曲线) · 训练曲线 (`MetricHistory`) · 混淆矩阵 · GradCAM |
+| **训练采样** | ClassBalancedSampler (类平衡采样) · compute_class_weights (effective-number / 逆频率 loss 权重) |
+| **数据集** | COCO / ImageFolder / Cassava / **ADE20K** / **Cityscapes** + CachedDataset (内存/LMDB 数据缓存) |
+| **Training Hooks** | Logger (EMA平滑) · Checkpoint · Evaluation · LR Scheduler · ModelEMA · MetricHistory · **EarlyStopping** · **SWAHook** |
+| **Data Pipeline** | Compose transforms (per-sample + batch) · COCO dataset · ImageFolder · ADE20K · Cityscapes · DataPrefetcher (async GPU) · CachedDataset |
+| **可视化 & 分析** | `draw_bboxes` · `draw_segmentation_overlay` · `draw_gt_pred_comparison` (GT vs 预测对比) · `plot_pr_curves` (per-class PR 曲线) · 训练曲线 (`MetricHistory`) · 混淆矩阵 · GradCAM · **FLOPs/参数量分析** (`tools/profile.py`) |
 | **CI/CD** | GitHub Actions: lint (ruff) + test (py3.10/3.11) + coverage (≥30%, artifact upload) |
 
 完整的插件发现、模型接口及扩展步骤见 [扩展指南](docs/guides/extension.md)。
@@ -196,6 +198,7 @@ elysia config dump configs/detection/fcos_resnet50_coco.yaml
 | **P3 · 开发者体验** | `--resume` 断点续训、MessageHub 状态总线、EMA 日志平滑、DataPrefetcher、`config dump`、`set_epoch()`。 | ✅ |
 | **P4 · 质量修补** | fcos 重命名、detection config 校验、Data Adapter、优化器扩展、tools、可视化、FSDP。 | ✅ |
 | **P5 · 训练生态** | Model EMA、MixUp/CutMix/Mosaic、RandomRotation/RandomAffine、PR 曲线、训练曲线、GT vs Pred 可视化、CI/CD、163 tests、52% coverage。 | ✅ |
+| **P6 · 训闭推进** | EarlyStopping (patience 自动终止)、SWA (周期权重平均)、TTA (multi-scale + flip 投票)、ClassBalancedSampler (类平衡采样)、ADE20K/Cityscapes 分割数据集、多任务 Loss 权重配置、FLOPs/参数量分析 (`tools/profile.py`)、CachedDataset (内存/LMDB 缓存)。 | ✅ |
 
 状态更新以 [`docs/status/current.md`](docs/status/current.md) 为准。
 

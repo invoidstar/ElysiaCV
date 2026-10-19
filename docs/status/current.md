@@ -1,6 +1,6 @@
 # 当前工程状态
 
-> **ElysiaCV v0.2.0（Alpha）** · 最近核对：2026-10-20 · 以 `main` 分支实际代码为依据。
+> **ElysiaCV v0.3.0（Alpha）** · 最近核对：2026-10-20 · 以 `main` 分支实际代码为依据。
 
 ## ✅ 已完成
 
@@ -12,20 +12,22 @@
 | **Backbone 组件** | MLP、SimpleCNN、ResNet(18/34/50/101)、ViT(B/16, L/16)、Swin(Tiny, Base) |
 | **Necks & Heads** | FPN、IdentityNeck、LinearClsHead、ClsHead、DetHead、SegHead |
 | **训练引擎** | `TrainingEngine` → `TrainerLoop`；梯度累积 + DDP/FSDP no_sync；`--resume` 断点续训 |
-| **Hook 系统** | HookBus + Logger(EMA平滑/TTY tqdm/非TTY百分比) + Checkpoint + Eval + LR + ModelEMA + MetricHistory |
+| **Hook 系统** | HookBus + Logger(EMA平滑/TTY tqdm/非TTY百分比) + Checkpoint + Eval + LR + ModelEMA + MetricHistory + **EarlyStopping** + **SWAHook** |
 | **DDP / FSDP** | `torch.distributed` init + `wrap_ddp` / `wrap_fsdp` + `gradient_sync_context` |
 | **CLI 统一** | `train`/`test`/`infer`/`config dump` 四命令；模型+数据通过回调注入 |
-| **数据层** | `src/elysia_cv/data/`：Compose pipeline、COCO/ImageFolder/Cassava Dataset、DataPrefetcher 异步预取、Data Adapter（HF/torchvision） |
+| **数据层** | `src/elysia_cv/data/`：Compose pipeline、COCO/ImageFolder/Cassava/**ADE20K**/**Cityscapes** Dataset、DataPrefetcher 异步预取、**CachedDataset** (内存/LMDB)、Data Adapter（HF/torchvision） |
 | **变换管线** | `Compose` 类（`__repr__` 可视化）+ per-sample 变换（LoadImageFromFile/LoadAnnotations/Resize/Normalize/PackDetInputs/PackSegInputs）+ batch 级变换（MixUp/CutMix/Mosaic） |
 | **数据增强** | RandomFlip、ColorJitter、RandomErasing、PhotoMetricDistortion、**RandomRotation**（旋转+bbox同步）、**RandomAffine**（平移/缩放/剪切+bbox同步） |
+| **训练采样** | **ClassBalancedSampler** (类平衡采样) + **compute_class_weights** (effective-number / 逆频率 loss 权重) |
+| **TTA** | `tta_predict` — multi-scale + horizontal flip 投票预测，`TTAClassificationWrapper` |
 | **损失函数** | CrossEntropy、FocalLoss、SmoothL1、IoU/GIoU、DiceLoss |
 | **分类** | Cassava 9 模型：MLP(63%)、SimpleCNN(81%)、ResNet-18/34/50(83%+)、ViT-B/16、ViT-L/16、Swin-T/B |
-| **检测 (FCOS)** | FCOS-style anchor-free：ResNet+FPN+DetHead、center-sampling 真损失、NMS 后处理、真 COCO mAP |
-| **分割 (FCN)** | ResNet-50/101 + SegHead，CE/Dice 损失，MeanIoU |
+| **检测 (FCOS)** | FCOS-style anchor-free：ResNet+FPN+DetHead、center-sampling 真损失、NMS 后处理、真 COCO mAP、**可配置 loss_weights** |
+| **分割 (FCN)** | ResNet-50/101 + SegHead，CE/Dice 损失，MeanIoU；**ADE20K (150类) + Cityscapes (19类) 数据集** |
 | **评测指标** | Accuracy、TopK、MeanAP (COCO-standard 101-pt mAP/mAP_50/mAP_75)、MeanIoU |
 | **优化器** | SGD、Adam、AdamW、RMSprop + MultiStepLR/CosineAnnealing/StepLR/ReduceLROnPlateau/ConstantLR + Warmup |
-| **Model EMA** | `ModelEMA`（影子权重 + ramp-up decay + apply_shadow/restore），eval 时自动切换 EMA 权重 |
-| **分析工具** | `tools/analyze.py`：混淆矩阵 + GradCAM 热力图 |
+| **正则化** | **Model EMA**（影子权重 + ramp-up decay + apply_shadow/restore）+ **SWA**（周期性 snapshot + 训练结束 merge）+ **EarlyStopping**（patience 自动终止） |
+| **分析工具** | `tools/analyze.py`：混淆矩阵 + GradCAM 热力图；**`tools/profile.py`**：FLOPs + 参数量逐层分析 |
 | **可视化** | `draw_bboxes()` + `draw_segmentation_overlay()` + `draw_gt_pred_comparison()`（GT 绿框 vs 预测红框对比）+ `plot_pr_curves()`（per-class PR 曲线 PNG） |
 | **训练曲线** | `MetricHistory` Hook：记录评测指标历史，训练结束输出 `analysis/training_curves.png` |
 | **MessageHub** | 全局标量状态总线：`update_scalar`/`get_all_scalars`/best-value 追踪 |
@@ -50,6 +52,7 @@
 | **Phase 3 · 开发者体验** | `--resume` 断点续训、MessageHub、EMA 日志、DataPrefetcher、`config dump`、`set_epoch()` | ✅ |
 | **Phase 4 · 质量修补** | fcos 重命名、detection config 校验、Data Adapter、优化器扩展、tools、可视化、FSDP | ✅ |
 | **Phase 5 · 训练生态** | Model EMA、MixUp/CutMix/Mosaic、RandomRotation/RandomAffine、PR 曲线、训练曲线、GT vs Pred 可视化、CI/CD、163 tests、52% coverage | ✅ |
+| **Phase 6 · 训闭推进** | EarlyStopping、SWA、TTA、ClassBalancedSampler、ADE20K/Cityscapes 数据集、多任务 Loss 权重配置、FLOPs 分析、CachedDataset | ✅ |
 
 ## 相关资料
 

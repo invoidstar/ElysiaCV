@@ -24,6 +24,7 @@ class EvalHook(Hook):
         metrics: list | None = None,
         save_best_metric: str | None = None,
         ema: Any = None,
+        swa: Any = None,
         metric_history: Any = None,
     ) -> None:
         self.dataloader = dataloader
@@ -40,6 +41,7 @@ class EvalHook(Hook):
         self.save_best_metric = save_best_metric
         self._best_value = -float("inf")
         self._ema = ema  # ModelEMA instance for weight swapping
+        self._swa = swa  # SWA instance for weight swapping
         self._metric_history = metric_history  # MetricHistory for curve plotting
 
     def after_step(self, loop) -> None:
@@ -50,16 +52,20 @@ class EvalHook(Hook):
         model = loop.model
         raw_model = unwrap_model(model)
 
-        # Swap to EMA weights for evaluation (if available)
+        # Swap to EMA/SWA weights for evaluation (if available)
         if self._ema is not None:
             self._ema.apply_shadow(raw_model)
+        if self._swa is not None:
+            self._swa.apply_shadow(raw_model)
 
         raw_model.eval()
 
         try:
             results = self._evaluate(raw_model, loop.device)
         finally:
-            # Restore training weights
+            # Restore training weights (reverse order)
+            if self._swa is not None:
+                self._swa.restore(raw_model)
             if self._ema is not None:
                 self._ema.restore(raw_model)
 

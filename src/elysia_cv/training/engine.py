@@ -27,7 +27,9 @@ from elysia_cv.training.hooks.checkpoint import CheckpointHook
 from elysia_cv.training.hooks.lr_scheduler import LrSchedulerHook
 from elysia_cv.training.hooks.evaluation import EvalHook
 from elysia_cv.training.hooks.metric_history import MetricHistory
+from elysia_cv.training.hooks.early_stopping import EarlyStoppingHook
 from elysia_cv.training.ema import ModelEMA, EMAHook
+from elysia_cv.training.swa import SWA, SWAHook
 from elysia_cv.optim.optimizers import build_optimizer
 from elysia_cv.optim.schedulers import build_scheduler
 
@@ -134,6 +136,25 @@ class TrainingEngine:
         metric_history = MetricHistory(output_dir=self.config.run.output_dir)
         hooks.register(metric_history)
 
+        # 7.5. Model EMA + SWA (optional, built before EvalHook so we can pass them)
+        ema: ModelEMA | None = None
+        swa: SWA | None = None
+
+        if self.config.engine.optimization.ema_enable:
+            ema = ModelEMA(
+                model,
+                decay=self.config.engine.optimization.ema_decay,
+            )
+            hooks.register(EMAHook(ema))
+
+        if self.config.engine.optimization.swa_enable:
+            swa = SWA(
+                model,
+                start_step=getattr(self.config.engine.optimization, "swa_start_step", 9000),
+                interval=getattr(self.config.engine.optimization, "swa_interval", 500),
+            )
+            hooks.register(SWAHook(swa))
+
         if val_loader is not None:
             hooks.register(EvalHook(
                 dataloader=val_loader,
@@ -141,17 +162,18 @@ class TrainingEngine:
                 metrics=self.config.eval.metrics,
                 save_best_metric=self.config.eval.save_best,
                 ema=ema,
+                swa=swa,
                 metric_history=metric_history,
             ))
 
-        # 7.5. Model EMA (optional)
-        ema: ModelEMA | None = None
-        if self.config.engine.optimization.ema_enable:
-            ema = ModelEMA(
-                model,
-                decay=self.config.engine.optimization.ema_decay,
-            )
-            hooks.register(EMAHook(ema))
+            # 7.7. Early Stopping (optional)
+            if self.config.eval.early_stop_enable:
+                hooks.register(EarlyStoppingHook(
+                    metric=self.config.eval.early_stop_metric,
+                    mode=self.config.eval.early_stop_mode,
+                    patience=self.config.eval.early_stop_patience,
+                    min_delta=self.config.eval.early_stop_min_delta,
+                ))
 
         # 7.6. Batch transforms (MixUp etc.) — built from data config
         batch_transforms = self._build_batch_transforms()

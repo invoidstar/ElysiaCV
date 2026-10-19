@@ -10,6 +10,7 @@ run:
 model:
   type: fcos
   pretrained_path: null
+  loss_weights: {cls: 1.0, reg: 1.0}
   backbone:
     type: ResNet
     depth: 50

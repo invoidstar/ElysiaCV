@@ -2,6 +2,27 @@
 
 All notable changes to ElysiaCV will be documented in this file.
 
+## [0.3.0] — 2026-10-20
+
+### Added — Phase 6: Training Closure
+
+- **EarlyStoppingHook**: patience-based auto-stop with `max`/`min` mode + `min_delta` tolerance; configurable via `eval.early_stop.*` in YAML
+- **SWA (Stochastic Weight Averaging)**: periodic snapshot averaging + `apply_shadow`/`restore`/`merge_into`; integrated into EvalHook for automatic eval-time swap; configurable via `engine.optimization.swa_*`
+- **TTA (Test-Time Augmentation)**: `tta_predict()` multi-scale + horizontal flip voting for classification; `TTAClassificationWrapper` for model-wrapping with auto-TTA
+- **ClassBalancedSampler**: per-class equal-probability sampler for imbalanced datasets; `compute_class_weights()` with effective-number (Cui et al., 2019) and inverse-frequency modes
+- **ADE20KDataset**: 150-class semantic segmentation dataset; auto-pairs `*_seg.png` label maps; returns `{"gt_semantic_seg"}` tensor
+- **CityscapesDataset**: 19-class urban-scene segmentation; labelId→trainId mapping (7→0 road, etc.); `IGNORE_ID=255`
+- **Multi-task loss_weights**: FCOS `forward_train` accepts `loss_weights` dict; `DetectionModel` stores `loss_weights` from config; default `{"cls": 1.0, "reg": 1.0}`
+- **tools/profile.py**: FLOPs + parameter count per-layer for any model; supports Conv2d/Linear/BatchNorm/LayerNorm/Pool/Activation; `--verbose` per-layer breakdown
+- **CachedDataset**: preload dataset into memory (or LMDB) for fast iteration; `cache_mode="memory"` / `"lmdb"`; hash-based cache validation; works with detection-style list-of-tensor labels
+
+### Changed
+- `engine.py`: fix EMA variable ordering bug; add SWA + EarlyStopping construction
+- `EvalHook`: accept `swa` param; eval-time weight swap: EMA → SWA; reverse-order restore
+- `config/loader.py`: add `loss_weights`, `swa_*`, `early_stop_*` to field map; add `("data",)` to open prefixes
+- `config/sections.py`: `_OptSubSection` + `EvalSection` now carry SWA + early_stop fields
+- All 6 doc files synced to v0.3.0 + Phase 6 features
+
 ## [0.2.0] — 2026-10-20
 
 ### Added — Phase 1: Core Loop

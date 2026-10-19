@@ -13,6 +13,8 @@ ElysiaCV 的统一 CLI 入口。
 | `train.py` | 启动训练 | `python tools/train.py config.yaml [--set k=v] [--resume ckpt.pt]` |
 | `test.py` | 模型评测 | `python tools/test.py config.yaml checkpoint.pt [--out result.json]` |
 | `infer.py` | 单张推理 | `python tools/infer.py config.yaml checkpoint.pt -i img.jpg [-o result.json]` |
+| `analyze.py` | 训练后分析 | `python tools/analyze.py config.yaml -c ckpt.pt [--num-samples 5]` |
+| **`profile.py`** | **FLOPs + 参数分析** | `python tools/profile.py config.yaml [--input-size C H W] [-v]` |
 
 ---
 
@@ -71,4 +73,8 @@ python tools/test.py configs/classification/resnet50_imagenet.yaml \
 # 推理
 python tools/infer.py configs/classification/resnet50_imagenet.yaml \
     ./outputs/checkpoints/checkpoint_best_Accuracy.pt -i photo.jpg
+
+# 模型分析
+python tools/profile.py configs/classification/resnet50_imagenet.yaml
+python tools/profile.py configs/detection/fcos_resnet50_coco.yaml --verbose
 ```

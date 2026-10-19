@@ -33,6 +33,11 @@ from elysia_cv.data.transforms.formatting import (  # noqa: F401
     PackDetInputs,
     PackSegInputs,
 )
+from elysia_cv.data.transforms.tta import (  # noqa: F401
+    tta_predict,
+    TTAClassificationWrapper,
+    _default_tta_transform,
+)
 
 
 class Compose:

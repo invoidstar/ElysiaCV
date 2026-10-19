@@ -1,0 +1,14 @@
+# FCN ResNet-50 on Cityscapes (19 classes)
+_base_: [../../models/fcn_r50.yaml, ../../datasets/cityscapes.yaml]
+
+run:
+  name: fcn_r50_cityscapes
+  output_dir: ./outputs/checkpoints/fcn_r50_cityscapes
+
+model:
+  head:
+    num_classes: 19  # Cityscapes has 19 trainId classes
+
+optim: {type: SGD, params: {lr: 0.01, momentum: 0.9, weight_decay: 0.0005}}
+schedule: {type: PolyLR, steps: 40000, base_lr: 0.01, min_lr: 0.0001}
+eval: {eval_freq: 4000, metrics: [{type: MeanIoU, num_classes: 19, ignore_index: 255}]}

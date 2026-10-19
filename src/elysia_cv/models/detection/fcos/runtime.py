@@ -38,7 +38,10 @@ def build_model(cfg: dict[str, Any]) -> nn.Module:
     head_type = head_cfg.pop("type", "DetHead")
     head = HEADS.build({"type": head_type, **head_cfg})
 
-    model = DetectionModel(backbone=backbone, neck=neck, head=head)
+    loss_weights = model_cfg.get("loss_weights", {"cls": 1.0, "reg": 1.0})
+    model = DetectionModel(
+        backbone=backbone, neck=neck, head=head, loss_weights=loss_weights,
+    )
 
     pretrained = model_cfg.get("pretrained_path")
     if pretrained:
@@ -51,11 +54,18 @@ def build_model(cfg: dict[str, Any]) -> nn.Module:
 class DetectionModel(nn.Module):
     """Backbone → Neck → Head detection model."""
 
-    def __init__(self, backbone: nn.Module, neck: nn.Module, head: nn.Module) -> None:
+    def __init__(
+        self,
+        backbone: nn.Module,
+        neck: nn.Module,
+        head: nn.Module,
+        loss_weights: dict[str, float] | None = None,
+    ) -> None:
         super().__init__()
         self.backbone = backbone
         self.neck = neck
         self.head = head
+        self.loss_weights = loss_weights or {"cls": 1.0, "reg": 1.0}
 
     def forward(self, x: torch.Tensor) -> dict[str, torch.Tensor | list[torch.Tensor]]:
         feats = self.backbone(x)
@@ -278,6 +288,7 @@ def forward_train(
     batch: dict[str, Any],
     *,
     device: torch.device | None = None,
+    loss_weights: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """One training forward pass with real target assignment.
 
@@ -287,10 +298,18 @@ def forward_train(
           - ``inputs``: [B, 3, H, W]
           - ``gt_bboxes``: list of [N_i, 4] tensors (xyxy)
           - ``gt_labels``:  list of [N_i] tensors (0-based class)
+        loss_weights: Optional dict mapping loss keys to scalars,
+            e.g. ``{"cls": 1.0, "reg": 1.0}``.  If None, reads
+            ``model.loss_weights`` (set from config).
 
     Returns:
         dict with ``loss`` and ``losses``.
     """
+    if loss_weights is None:
+        loss_weights = getattr(model, "loss_weights", {})
+    if not loss_weights:
+        loss_weights = {}
+
     images = batch["inputs"]
     gt_bboxes = batch.get("gt_bboxes", [])
     gt_labels = batch.get("gt_labels", [])
@@ -321,7 +340,10 @@ def forward_train(
     cls_loss = _compute_cls_loss(cls_scores, cls_targets, pos_masks, num_classes)
     reg_loss = _compute_reg_loss(bbox_preds, reg_targets, pos_masks)
 
-    loss = cls_loss + reg_loss
+    w_cls = loss_weights.get("cls", 1.0)
+    w_reg = loss_weights.get("reg", 1.0)
+
+    loss = w_cls * cls_loss + w_reg * reg_loss
 
     return {
         "loss": loss,
@@ -515,5 +537,6 @@ def get_default_config() -> dict[str, Any]:
                          "pool_last": False},
             "neck": {"type": "FPN", "in_channels": [256, 512, 1024, 2048], "out_channels": 256},
             "head": {"type": "DetHead", "num_classes": 80},
+            "loss_weights": {"cls": 1.0, "reg": 1.0},
         }
     }

@@ -1,0 +1,24 @@
+# Cityscapes semantic segmentation dataset config
+# num_classes: 19, ignore_id: 255
+data:
+  train:
+    type: CityscapesDataset
+    root: /data/cityscapes
+    split: train
+    batch_size: 4
+    transforms:
+      - {type: LoadImageFromFile}
+      - {type: Resize, size: [768, 768]}
+      - {type: RandomFlip, prob: 0.5}
+      - {type: Normalize}
+      - {type: PackSegInputs}
+  val:
+    type: CityscapesDataset
+    root: /data/cityscapes
+    split: val
+    batch_size: 4
+    transforms:
+      - {type: LoadImageFromFile}
+      - {type: Resize, size: [768, 768]}
+      - {type: Normalize}
+      - {type: PackSegInputs}

@@ -75,7 +75,7 @@ micro_step_0   micro_step_1   micro_step_2   micro_step_3
 _base_: "../_base_/default_runtime.yaml"    # 继承默认值
 
 run:        # 运行元数据
-model:      # 模型定义 (type + backbone + neck + head)
+model:      # 模型定义 (type + backbone + neck + head + loss_weights)
 data:       # 数据源 + 预处理
   train:
     dataset_root: /data/imagenet/train
@@ -86,11 +86,11 @@ data:       # 数据源 + 预处理
     dataset_root: /data/imagenet/val
     batch_size: 64
     transforms: [...]
-engine:     # 训练策略 (DDP / precision / compile / optimization / EMA)
+engine:     # 训练策略 (DDP / precision / compile / optimization / EMA / SWA)
 optim:      # 优化器 (type + params)
 schedule:   # 学习率策略 (type + steps + warmup)
 tracking:   # 日志 / W&B
-eval:       # 评测频率 + 指标
+eval:       # 评测频率 + 指标 + early_stop
 ```
 
 ---
@@ -106,6 +106,88 @@ engine:
   optimization:
     ema_enable: true       # 启用
     ema_decay: 0.9999      # 衰减系数（可选，默认 0.9999）
+```
+
+### SWA（随机权重平均）
+
+训练后期周期性保存模型权重 snapshot，训练结束时 merge 为平均权重。与 EMA 互补，可额外提 0.3-0.5%。
+
+```yaml
+engine:
+  optimization:
+    swa_enable: true
+    swa_start_step: 9000   # 从第 N 步开始收集 snapshot
+    swa_interval: 500      # 每 N 步收集一次
+```
+
+评测时自动切换到 SWA 平均权重（叠加在 EMA 之上）。
+
+### EarlyStopping（自动终止）
+
+当监控的评测指标连续 N 轮无提升时，自动终止训练。
+
+```yaml
+eval:
+  early_stop_enable: true
+  early_stop:
+    metric: Accuracy       # 监控指标
+    mode: max              # max（越大越好）/ min（越小越好）
+    patience: 5            # 容忍 N 轮不提升
+    min_delta: 0.001       # 最小提升阈值
+```
+
+### TTA（测试时增强）
+
+推理时 multi-scale + horizontal flip 投票预测。分类任务自动支持：
+
+```python
+from elysia_cv.data.transforms.tta import tta_predict
+
+logits = tta_predict(model, image, device,
+                     scales=[0.8, 1.0, 1.2],    # 3 种缩放
+                     flips=[False, True])         # × 水平翻转 = 6 种变体
+pred_class = logits.argmax(dim=1).item()
+```
+
+### 类别不平衡处理
+
+```python
+from elysia_cv.data.sampler import ClassBalancedSampler, compute_class_weights
+
+# 类平衡采样器
+sampler = ClassBalancedSampler(dataset, num_samples=1000)
+loader = DataLoader(dataset, sampler=sampler, batch_size=32)
+
+# 类别加权 loss 权重
+weights = compute_class_weights(dataset, beta=0.9999)  # effective-number
+loss_fn = nn.CrossEntropyLoss(weight=weights)
+```
+
+### 数据缓存
+
+小数据集可全量预加载到内存，加速 I/O：
+
+```python
+from elysia_cv.data.cache import CachedDataset
+
+ds = CachedDataset(original_dataset)                  # 内存缓存
+ds = CachedDataset(original_dataset,
+                   cache_dir="/tmp/my_cache.lmdb",
+                   cache_mode="lmdb")                 # 持久化缓存
+```
+
+### 分割数据集 (ADE20K / Cityscapes)
+
+```yaml
+data:
+  train:
+    type: ADE20KDataset     # 或 CityscapesDataset
+    root: /data/ADEChallengeData2016
+    split: training          # ADE20K: training/validation
+    transforms:
+      - {type: Resize, size: [512, 512]}
+      - {type: Normalize}
+      - {type: PackSegInputs}
 ```
 
 ### 数据增强

@@ -40,7 +40,7 @@ _CV_TOP_LEVEL_SECTIONS = frozenset(
 _CV_FIELD_MAP: dict[tuple[str, ...], frozenset[str]] = {
     (): _CV_TOP_LEVEL_SECTIONS,
     ("run",): frozenset({"name", "stage", "seed", "output_dir", "test_run"}),
-    ("model",): frozenset({"type", "pretrained_path", "backbone", "neck", "head", "kwargs"}),
+    ("model",): frozenset({"type", "pretrained_path", "backbone", "neck", "head", "kwargs", "loss_weights"}),
     ("model", "backbone"): frozenset({"type"}),
     ("model", "neck"): frozenset({"type"}),
     ("model", "head"): frozenset({"type"}),
@@ -67,12 +67,18 @@ _CV_FIELD_MAP: dict[tuple[str, ...], frozenset[str]] = {
     ),
     ("engine", "precision"): frozenset({"mixed_precision", "dtype", "cudnn_benchmark", "allow_tf32"}),
     ("engine", "compile"): frozenset({"enabled", "mode"}),
-    ("engine", "optimization"): frozenset({"gradient_accumulation_steps", "grad_clip_norm", "optimizer_zero_grad_set_to_none"}),
+    ("engine", "optimization"): frozenset({
+        "gradient_accumulation_steps", "grad_clip_norm", "optimizer_zero_grad_set_to_none",
+        "ema_enable", "ema_decay", "swa_enable", "swa_start_step", "swa_interval",
+    }),
     ("optim",): frozenset({"type", "params"}),
     ("schedule",): frozenset({"type", "steps", "warmup_steps", "base_lr", "min_lr", "params"}),
     ("tracking",): frozenset({"log_freq", "wandb"}),
     ("tracking", "wandb"): frozenset({"enabled", "project", "entity", "run_id", "resume", "mode"}),
-    ("eval",): frozenset({"eval_freq", "metrics", "save_best", "save_final"}),
+    ("eval",): frozenset({
+        "eval_freq", "metrics", "save_best", "save_final",
+        "early_stop_enable", "early_stop",
+    }),
 }
 
 # Prefixes that allow arbitrary sub-keys (plugin-owned): these paths are NOT
@@ -84,6 +90,7 @@ _OPEN_PREFIXES: tuple[tuple[str, ...], ...] = (
     ("model", "kwargs"),
     ("optim", "params"),
     ("schedule", "params"),
+    ("data",),               # data-level keys vary by dataset type
 )
 
 _ENV_EXPR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*?))?\}")

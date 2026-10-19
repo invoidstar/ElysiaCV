@@ -233,6 +233,9 @@ class _OptSubSection:
     optimizer_zero_grad_set_to_none: bool = True
     ema_enable: bool = False
     ema_decay: float = 0.9999
+    swa_enable: bool = False
+    swa_start_step: int = 9000
+    swa_interval: int = 500
 
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, Any]) -> "_OptSubSection":
@@ -242,6 +245,9 @@ class _OptSubSection:
             optimizer_zero_grad_set_to_none=bool(mapping.get("optimizer_zero_grad_set_to_none", True)),
             ema_enable=bool(mapping.get("ema_enable", False)),
             ema_decay=float(mapping.get("ema_decay", 0.9999)),
+            swa_enable=bool(mapping.get("swa_enable", False)),
+            swa_start_step=int(mapping.get("swa_start_step", 9000)),
+            swa_interval=int(mapping.get("swa_interval", 500)),
         )
 
 
@@ -355,14 +361,25 @@ class EvalSection:
     metrics: list[str] = field(default_factory=lambda: ["Accuracy"])
     save_best: str | None = None   # metric name for best-model selection
     save_final: bool = True
+    early_stop_enable: bool = False
+    early_stop_metric: str = "Accuracy"
+    early_stop_mode: str = "max"
+    early_stop_patience: int = 5
+    early_stop_min_delta: float = 0.0
 
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, Any]) -> "EvalSection":
+        escfg = mapping.get("early_stop") or {}
         return cls(
             eval_freq=int(mapping.get("eval_freq", 1000)),
             metrics=list(mapping.get("metrics", ["Accuracy"])),
             save_best=_optional_str(mapping.get("save_best")),
             save_final=bool(mapping.get("save_final", True)),
+            early_stop_enable=bool(mapping.get("early_stop_enable", False)),
+            early_stop_metric=str(escfg.get("metric", "Accuracy")),
+            early_stop_mode=str(escfg.get("mode", "max")),
+            early_stop_patience=int(escfg.get("patience", 5)),
+            early_stop_min_delta=float(escfg.get("min_delta", 0.0)),
         )
 
 

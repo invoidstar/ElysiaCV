@@ -14,9 +14,9 @@ ElysiaCV 是一个面向计算机视觉（分类、检测、分割）的统一�
 - **配置驱动**：一切从 YAML 配置出发（MMDetection 式的 `_base_` 继承）
 - **插件式架构**：模型通过装饰器自注册，无需集中注册文件
 - **组件库**：共享的 Backbone、Neck、Head、Loss、Metric
-- **训练引擎**：TrainerLoop + HookBus（checkpoint/log/evaluation/EMA/training-curves），支持 DDP / FSDP
+- **训练引擎**：TrainerLoop + HookBus（checkpoint/log/evaluation/EMA/early-stopping/SWA/training-curves），支持 DDP / FSDP
 
-**版本**：v0.2.0 Alpha | **Python**：≥3.10 | **PyTorch**：≥2.0
+**版本**：v0.3.0 Alpha | **Python**：≥3.10 | **PyTorch**：≥2.0
 
 ---
 
@@ -39,10 +39,12 @@ ElysiaCV/
 │  ║ ├── losses/         损失函数 (FocalLoss, CrossEntropy...)     ║
 │  ║ ├── metrics/        评估指标 (MeanAP, MeanIoU, Accuracy)       ║
 │  ║ ├── optim/          优化器与调度器构建器 (SGD/Adam/AdamW/RMSprop)║
-│  ║ ├── data/           通用数据加载层 (COCO/ImageFolder/Adapter) ║
-│  ║ │   └── transforms/  per-sample + batch 级变换 (MixUp/CutMix/Mosaic)║
+│  ║ ├── data/           通用数据加载层 (COCO/ADE20K/Cityscapes)   ║
+│  ║ │   ├── transforms/  per-sample + batch 级变换 (MixUp/CutMix/Mosaic)║
+│  ║ │   ├── cache.py     CachedDataset (内存/LMDB 数据缓存)       ║
+│  ║ │   └── transforms/tta.py  TTA (multi-scale + flip 投票)     ║
 │  ║ ├── models/         模型契约 + 参考插件 (resnet/fcos/fcn)     ║
-│  ║ ├── training/       训练引擎 (Loop, Hooks, DDP/FSDP, EMA, Engine)║
+│  ║ ├── training/       训练引擎 (Loop, Hooks, DDP/FSDP, EMA, SWA, Engine)║
 │  ║ ├── utils/          可视化 (PR curves, bbox, segmentation)    ║
 │  ║ └── cli.py          统一 CLI (train/test/infer/config dump)   ║
 │  ║                                                              ║
@@ -59,10 +61,13 @@ ElysiaCV/
 ├──╢ configs/                                                     ║
 │  ║ ├── models/mlp.yaml .. swin_base.yaml   模型定义 (9 个)       ║
 │  ║ ├── datasets/cassava.yaml              Cassava 数据集         ║
-│  ║ └── experiments/cassava_*.yaml         实验组合 (9 个)        ║
+│  ║ │        ade20k.yaml / cityscapes.yaml  分割数据集             ║
+│  ║ └── experiments/cassava_*.yaml +       实验组合 (9+2 个)      ║
+│  ║        ade20k_fcn_r50.yaml /                                    ║
+│  ║        cityscapes_fcn_r50.yaml                                  ║
 │  ║                                                              ║
 ├──╢ scripts/run_cassava_experiments.sh     批量实验启动脚本        ║
-├──╢ tools/analyze.py                       训练后分析              ║
+├──╢ tools/analyze.py / profile.py           训练后分析 + FLOPs 分析 ║
 ├──╢ projects/HERBS/                        项目文档目录            ║
 │  ║ ├── AGENTS.md                          项目约定与实验记录      ║
 │  ║ └── tools/analyze.py                   混淆矩阵 + GradCAM     ║
@@ -206,6 +211,14 @@ python tools/analyze.py configs/experiments/cassava_resnet50.yaml \
 ```
 
 输出：`analysis/confusion_matrix.png`、`analysis/per_class_report.txt`、`analysis/gradcam/`、`analysis/training_curves.png`（自动生成）、`analysis/pr_curves.png`（需手动调用 `plot_pr_curves()`）
+
+### 4.8 模型分析
+
+```bash
+# FLOPs + 参数量分析
+python tools/profile.py configs/experiments/cassava_resnet50.yaml
+python tools/profile.py <config.yaml> --input-size 3 224 224 --verbose
+```
 
 ---
 
