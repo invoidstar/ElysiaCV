@@ -68,7 +68,7 @@
   </tr>
 </table>
 
-> **当前阶段：v0.3.0 · Alpha / 工程原型。** 分类、检测 (FCOS-style)、语义分割（FCN）三类任务均已完成真实端到端训练闭环，包含真损失函数、COCO 标准 mAP 指标、COCO 数据集加载和 `data/` 变换管线。内置 ADE20K/Cityscapes 分割数据集、EarlyStopping、SWA、TTA、ClassBalancedSampler、CachedDataset 数据缓存、`tools/profile.py` FLOPs 分析。163 个测试，52% 代码覆盖率。GitHub Actions CI 自动化 lint + test + coverage。详细的模块完成状态见 [当前工程状态](docs/status/current.md)。
+> **当前阶段：v0.4.0 · Alpha / 工程原型。** 分类、检测（FCOS + YOLO v10/v11/v12/v26 + HDMS-YOLO）、语义分割（FCN）三类任务均已完成真实端到端训练闭环。YOLO 纯 PyTorch 自实现，零 ultralytics 依赖，21 变体全部可训。内置 ADE20K/Cityscapes 分割数据集、EarlyStopping、SWA、TTA、ClassBalancedSampler、CachedDataset 数据缓存、`tools/profile.py` FLOPs 分析。140 个测试，52% 代码覆盖率。GitHub Actions CI 自动化 lint + test + coverage。详细的模块完成状态见 [当前工程状态](docs/status/current.md)。
 
 <a id="vision-tasks"></a>
 ## Vision tasks · 从图像理解到像素级预测
@@ -167,6 +167,7 @@ elysia config dump configs/detection/fcos_resnet50_coco.yaml
 | [`resnet`](src/elysia_cv/models/classification/resnet/) | Classification | ResNet-18 / 34 / 50 / 101 |
 | [`cassava`](src/elysia_cv/models/classification/cassava/) | Classification | MLP、SimpleCNN、ResNet-18/34/50、ViT-B/16、ViT-L/16、Swin-T/B |
 | [`fcos`](src/elysia_cv/models/detection/fcos/) | Detection | FCOS-style anchor-free，ResNet + FPN + DetHead，真损失 + NMS + COCO mAP |
+| [`yolo`](src/elysia_cv/models/detection/yolo/) | Detection | YOLOv10/v11/v12/YOLO26 (n/s/m/l/x, 18 variants) + HDMS-YOLO (3 variants)。纯 PyTorch，零 ultralytics。CSPDarkNet+A2C2f+PAN+双头。TAL+CIoU+DFL+BCE。NMS-free (v10)。[方案](../plans/yolo_integration.md) |
 | [`fcn`](src/elysia_cv/models/segmentation/fcn/) | Segmentation | ResNet-50/101 + SegHead，CE / Dice 损失，MeanIoU |
 
 ### Shared building blocks
@@ -199,6 +200,7 @@ elysia config dump configs/detection/fcos_resnet50_coco.yaml
 | **P4 · 质量修补** | fcos 重命名、detection config 校验、Data Adapter、优化器扩展、tools、可视化、FSDP。 | ✅ |
 | **P5 · 训练生态** | Model EMA、MixUp/CutMix/Mosaic、RandomRotation/RandomAffine、PR 曲线、训练曲线、GT vs Pred 可视化、CI/CD、163 tests、52% coverage。 | ✅ |
 | **P6 · 训闭推进** | EarlyStopping (patience 自动终止)、SWA (周期权重平均)、TTA (multi-scale + flip 投票)、ClassBalancedSampler (类平衡采样)、ADE20K/Cityscapes 分割数据集、多任务 Loss 权重配置、FLOPs/参数量分析 (`tools/profile.py`)、CachedDataset (内存/LMDB 缓存)。 | ✅ |
+| **P7 · YOLO 集成** | 纯 PyTorch 自实现 YOLOv10/v11/v12/YOLO26 (n/s/m/l/x) + HDMS-YOLO。21 变体、22 配置 YAML、18 预训练 URL。共享 CSPDarkNet/A2C2f/PAN/DetectHead。Ultralytics-free .pt 权重加载。详见 [方案文档](docs/plans/yolo_integration.md)。 | ✅ |
 
 状态更新以 [`docs/status/current.md`](docs/status/current.md) 为准。
 

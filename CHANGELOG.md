@@ -2,6 +2,36 @@
 
 All notable changes to ElysiaCV will be documented in this file.
 
+## [0.4.0] — 2026-10-20 · Phase 7: YOLO Integration
+
+### Added — YOLO Detection Models (zero ultralytics dependency)
+
+- **YOLOv10 (n/s/m)**: NMS-free dual head (One2Many + One2One), V10Loss with dual TAL assigners, NMS-free post-processing
+- **YOLOv11 (n/s/m/l/x)**: C3k2 backbone + standard decoupled head, CIoU+DFL+BCE loss
+- **YOLOv12 (n/s/m/l/x)**: A2C2f attention backbone, PAN+A2C2f neck, CIoU+DFL+BCE loss
+- **YOLO26 (n/s/m/l/x)**: Latest YOLO architecture, CIoU+DFL+BCE loss
+- **HDMS-YOLO (n/s/m)**: SimSPPF + EMA attention for agricultural weed detection
+- **Total**: 21 registered variants, 18 pretrained weight URLs, 22 training config YAMLs
+
+### Shared Components (src/elysia_cv/models/detection/yolo/)
+
+| Category | Files | Lines | Description |
+|----------|-------|------:|-------------|
+| backbone | `csp_darknet.py`, `a2c2f.py` | 420 | CSPDarkNet + A2C2f attention |
+| neck | `pan.py` | 250 | PAN-FPN with version switches |
+| head | `detect_head.py`, `v10_head.py` | 500 | Standard + NMS-free dual head |
+| losses | `task_aligned_assigner.py`, `v8_loss.py`, `v10_loss.py` | 530 | TAL + CIoU/DFL/BCE + V10 dual |
+| postprocess | `nms.py` | 180 | DFL decode + batched NMS |
+| infra | `model.py`, `variants.py`, `runtime.py`, `plugin.py`, `weights.py`, `hdms_yolo.py` | 950 | Build, config, training loop, plugin registry |
+
+### Key Features
+- **Ultralytics-free weight loading**: StubModule injection via `sys.modules` — loads `.pt` checkpoints without installing `ultralytics`
+- **Three-pass key remapping**: Direct → Sequential position → Shape matching
+- **Weight cache**: `/data/hdd3/chuqi/pretrained/`
+- **HuggingFace cache**: `/data/hdd3/chuqi/cache/huggingface/`
+- All 21 variants build + forward + train + grad verified; 140 regression tests pass
+- See [docs/plans/yolo_integration.md](docs/plans/yolo_integration.md) for full design
+
 ## [0.3.0] — 2026-10-20
 
 ### Added — Phase 6: Training Closure

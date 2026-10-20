@@ -1,0 +1,103 @@
+# Shared YOLO training base config — inherited by all YOLO variant configs.
+# Individual configs need only override:
+#   _base_: ["../_base_/yolo_base.yaml"]
+#   model.variant: yolov11n    # or yolov10n, yolov12n, yolov26n, hdms_yolov11n, etc.
+#
+# Each variant can also override model.num_classes for custom datasets.
+
+run:
+  name: yolo
+  stage: train
+  seed: 42
+  output_dir: ./outputs/checkpoints/${run.name}
+  test_run: false
+
+model:
+  type: yolo
+  variant: yolov11n        # override in child config
+  num_classes: 80
+  pretrained: false
+  loss_weights:
+    cls: 0.5
+    box: 7.5
+    dfl: 1.5
+    o2m: 1.0              # YOLOv10 only
+    o2o: 0.5              # YOLOv10 only
+
+data:
+  train:
+    dataset_name: COCO
+    dataset_root: ${DATA_ROOT:-/data/coco}
+    split: train2017
+    loader:
+      batch_size: 16
+      num_workers: 4
+      pin_memory: true
+      drop_last: true
+    transforms:
+      - type: LoadImageFromFile
+      - type: LoadAnnotations
+      - type: Resize
+        scale: [640, 640]
+        keep_ratio: true
+      - type: RandomFlip
+        prob: 0.5
+      - type: Normalize
+        mean: [0.0, 0.0, 0.0]
+        std: [255.0, 255.0, 255.0]
+      - type: PackDetInputs
+  val:
+    dataset_name: COCO
+    dataset_root: ${DATA_ROOT:-/data/coco}
+    split: val2017
+    loader:
+      batch_size: 8
+      num_workers: 2
+      pin_memory: true
+      drop_last: false
+    transforms:
+      - type: LoadImageFromFile
+      - type: LoadAnnotations
+      - type: Resize
+        scale: [640, 640]
+        keep_ratio: true
+      - type: Normalize
+        mean: [0.0, 0.0, 0.0]
+        std: [255.0, 255.0, 255.0]
+      - type: PackDetInputs
+
+engine:
+  backend: native
+  strategy: ddp
+  mixed_precision: none
+  compile: false
+  optimization:
+    gradient_accumulation_steps: 1
+    ema_enable: true
+    ema_decay: 0.9999
+    swa_enable: false
+  max_epochs: 300
+  steps_per_epoch: null
+  check_val_every_n_epoch: 5
+
+optim:
+  type: AdamW
+  params:
+    lr: 0.001
+    weight_decay: 0.0005
+
+schedule:
+  type: CosineAnnealing
+  params:
+    T_max: 300
+    eta_min: 0.00001
+  warmup_steps: 1000
+  warmup_start_lr: 0.0
+
+eval:
+  eval_freq: 5
+  metrics:
+    - type: MeanAP
+      num_classes: 80
+  save_best: mAP
+  save_final: true

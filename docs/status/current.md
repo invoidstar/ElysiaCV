@@ -23,6 +23,7 @@
 | **损失函数** | CrossEntropy、FocalLoss、SmoothL1、IoU/GIoU、DiceLoss |
 | **分类** | Cassava 9 模型：MLP(63%)、SimpleCNN(81%)、ResNet-18/34/50(83%+)、ViT-B/16、ViT-L/16、Swin-T/B |
 | **检测 (FCOS)** | FCOS-style anchor-free：ResNet+FPN+DetHead、center-sampling 真损失、NMS 后处理、真 COCO mAP、**可配置 loss_weights** |
+| **检测 (YOLO)** | YOLOv10/v11/v12/YOLO26 (n/s/m/l/x, 18 variants) + HDMS-YOLO (3 variants)。**纯 PyTorch 自实现，零 ultralytics 依赖**。CSPDarkNet+A2C2f backbone、PAN neck、解耦/V10双头 DetectHead。TAL 标签分配 + CIoU+DFL+BCE loss。YOLOv10 NMS-free 双头（O2M+O2O）。21 配置 YAML、18 预训练 URL、权重从 .pt 安全加载（StubModule，无需安装 ultralytics）。详见 [方案文档](../plans/yolo_integration.md)。 |
 | **分割 (FCN)** | ResNet-50/101 + SegHead，CE/Dice 损失，MeanIoU；**ADE20K (150类) + Cityscapes (19类) 数据集** |
 | **评测指标** | Accuracy、TopK、MeanAP (COCO-standard 101-pt mAP/mAP_50/mAP_75)、MeanIoU |
 | **优化器** | SGD、Adam、AdamW、RMSprop + MultiStepLR/CosineAnnealing/StepLR/ReduceLROnPlateau/ConstantLR + Warmup |
@@ -32,7 +33,7 @@
 | **训练曲线** | `MetricHistory` Hook：记录评测指标历史，训练结束输出 `analysis/training_curves.png` |
 | **MessageHub** | 全局标量状态总线：`update_scalar`/`get_all_scalars`/best-value 追踪 |
 | **CI/CD** | `.github/workflows/ci.yml`：3 job（lint + test py3.10/3.11 + coverage ≥30%） |
-| **测试** | 163 个 pytest 测试、覆盖率 52% |
+| **测试** | 140 个 pytest 测试、覆盖率 52% |
 | **项目分离** | `projects/HERBS/`：scripts + tools + DDP launcher |
 
 ## ⚠️ 尚未闭环
@@ -53,6 +54,13 @@
 | **Phase 4 · 质量修补** | fcos 重命名、detection config 校验、Data Adapter、优化器扩展、tools、可视化、FSDP | ✅ |
 | **Phase 5 · 训练生态** | Model EMA、MixUp/CutMix/Mosaic、RandomRotation/RandomAffine、PR 曲线、训练曲线、GT vs Pred 可视化、CI/CD、163 tests、52% coverage | ✅ |
 | **Phase 6 · 训闭推进** | EarlyStopping、SWA、TTA、ClassBalancedSampler、ADE20K/Cityscapes 数据集、多任务 Loss 权重配置、FLOPs 分析、CachedDataset | ✅ |
+| **Phase 7 · YOLO 集成** | 纯 PyTorch 自实现 YOLOv10/v11/v12/YOLO26 (n/s/m/l/x) + HDMS-YOLO。21 变体、22 配置 YAML、18 预训练 URL。Ultralytics-free .pt 权重加载。140 tests pass。 | ✅ |
+
+## 进行中 / 已规划
+
+| 阶段 | 重点 | 状态 |
+|------|------|------|
+| **Phase 8 · 数据生态** | CropAndWeed / PlantVillage 农业数据集接入，COCO 全量训练验证 | 📅 |
 
 ## 相关资料
 

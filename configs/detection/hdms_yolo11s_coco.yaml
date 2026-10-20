@@ -1,0 +1,8 @@
+_base_: ["../_base_/yolo_base.yaml"]
+
+run:
+  name: hdms_yolo11s_coco
+  output_dir: ./outputs/checkpoints/hdms_yolo11s_coco
+
+model:
+  variant: hdms_yolov11s

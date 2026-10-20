@@ -1,0 +1,8 @@
+_base_: ["../_base_/yolo_base.yaml"]
+
+run:
+  name: yolo11l_coco
+  output_dir: ./outputs/checkpoints/yolo11l_coco
+
+model:
+  variant: yolov11l
