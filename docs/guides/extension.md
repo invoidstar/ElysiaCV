@@ -1,12 +1,31 @@
 # 扩展指南
 
-> 状态：Active（长期有效） | 最后更新：2026-10
+> 状态：Active（长期有效） | 最后更新：2026-10-21
 
 ---
 
 ## 新增模型
 
-新增模型只需创建两个文件：`plugin.py` + `runtime.py`，无需修改任何框架代码。
+### 方法 A：视频模型（推荐 — 一行注册）
+
+动作识别模型使用 `model_builder.py` 中的 `_MODEL_REGISTRY` 注册，只需添加**一行**代码：
+
+```python
+# src/elysia_cv/model_builder.py
+_register("my_video_model",
+          "elysia_cv.models.action_recognition.my_model.runtime",
+          family="video")
+```
+
+然后在 `src/elysia_cv/models/action_recognition/my_model/` 下创建：
+- `runtime.py` — `build_model(cfg)` + 从 `common_video_forward` import `forward_train`, `forward_test`
+- `model.py` — 你的模型实现
+
+无需修改 `cli.py`、`engine.py` 或任何其他文件。
+
+### 方法 B：传统插件式（分类/检测/分割）
+
+创建两个文件：`plugin.py` + `runtime.py`。
 
 ### 目录结构
 
@@ -33,7 +52,7 @@ from elysia_cv.models.contract import ModelSpec
 
 MODEL_PLUGIN = SimpleModelPlugin(
     name="my_model",                      # 全局唯一名
-    task_type="classification",           # classification / detection / segmentation
+    task_type="classification",           # classification / detection / segmentation / action_recognition
     api_version=CORE_API_VERSION,
     readiness_level=PluginReadinessLevel.trainable,
     model_specs=[

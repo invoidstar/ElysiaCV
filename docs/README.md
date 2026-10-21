@@ -1,6 +1,6 @@
 # ElysiaCV 文档
 
-> 状态：Active（长期有效） | 最后更新：2026-10
+> 状态：Active（长期有效） | 最后更新：2026-10-21
 
 ---
 
@@ -8,8 +8,8 @@
 
 | 目录 | 职责 | 入口 |
 |------|------|------|
-| `status/` | 当前工程状态、功能清单、路线图 | [status/current.md](status/current.md) |
-| `guides/` | 用户操作指南（训练/评测/配置/扩展） | [guides/training.md](guides/training.md) |
+| `status/` | 当前工程状态、功能清单、路线图（v0.5.0） | [status/current.md](status/current.md) |
+| `guides/` | 用户操作指南（训练/评测/配置/扩展，覆盖分类/检测/分割/动作识别） | [guides/training.md](guides/training.md) |
 | `infrastructure/` | 长期架构合同、性能优化依据 | [infrastructure/architecture.md](infrastructure/architecture.md) |
 | `assets/` | 静态资源（架构图、截图） | — |
 

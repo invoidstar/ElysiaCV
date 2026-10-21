@@ -7,12 +7,12 @@
   </picture>
 
   <h3>让视觉研究聚焦模型，让工程基础设施持续复用。</h3>
-  <p>面向 Classification、Detection 与 Segmentation 的模块化研究框架，统一配置、模型插件、共享组件与训练生命周期。</p>
+  <p>面向 Classification、Detection、Segmentation 与 Action Recognition 的模块化研究框架，统一配置、模型插件、共享组件与训练生命周期。</p>
 
   <p>
     <a href="pyproject.toml"><img src="docs/assets/readme/badge-python.svg" height="28" alt="Python 3.10+" /></a>
     <a href="pyproject.toml"><img src="docs/assets/readme/badge-pytorch.svg" height="28" alt="Backend PyTorch" /></a>
-    <a href="docs/status/current.md"><img src="docs/assets/readme/badge-version.svg" height="28" alt="Version 0.4.0 Alpha" /></a>
+    <a href="docs/status/current.md"><img src="docs/assets/readme/badge-version.svg" height="28" alt="Version 0.5.0 Alpha" /></a>
     <a href="LICENSE"><img src="docs/assets/readme/badge-license.svg" height="28" alt="Apache-2.0 License" /></a>
     <a href=".github/workflows/ci.yml"><img src="https://github.com/invoidstar/ElysiaCV/actions/workflows/ci.yml/badge.svg" height="28" alt="CI status" /></a>
   </p>
@@ -68,7 +68,7 @@
   </tr>
 </table>
 
-> **当前阶段：v0.4.0 · Alpha / 工程原型。** 分类、检测（FCOS + YOLO v10/v11/v12/v26 + HDMS-YOLO）、语义分割（FCN）三类任务均已完成真实端到端训练闭环。YOLO 纯 PyTorch 自实现，零 ultralytics 依赖，21 变体全部可训。内置 ADE20K/Cityscapes 分割数据集、EarlyStopping、SWA、TTA、ClassBalancedSampler、CachedDataset 数据缓存、`tools/profile.py` FLOPs 分析。140 个测试，52% 代码覆盖率。GitHub Actions CI 自动化 lint + test + coverage。详细的模块完成状态见 [当前工程状态](docs/status/current.md)。
+> **当前阶段：v0.5.0 · Alpha / 工程原型。** 分类、检测（FCOS + YOLO v10/v11/v12/v26 + HDMS-YOLO）、语义分割（FCN）、**动作识别（16 种视频模型）** 四类任务均已完成真实端到端训练闭环。YOLO 纯 PyTorch 自实现，零 ultralytics 依赖，21 变体全部可训。内置 ADE20K/Cityscapes 分割数据集、VideoDataset (UCF101/Kinetics) 视频数据集、EarlyStopping、SWA、TTA、ClassBalancedSampler、CachedDataset 数据缓存、`tools/profile.py` FLOPs 分析。140+ 个测试，52% 代码覆盖率。GitHub Actions CI 自动化 lint + test + coverage。详细的模块完成状态见 [当前工程状态](docs/status/current.md)。
 
 <a id="vision-tasks"></a>
 ## Vision tasks · 从图像理解到像素级预测
@@ -80,6 +80,7 @@
 | **Image Classification** | 将输入图像映射为类别，用于分类基线与模型架构对比。 | ResNet 系列；Cassava 的 MLP、SimpleCNN、ResNet、ViT 配置与 Runtime。 |
 | **Object Detection** | FCOS-style anchor-free 单阶段检测，多尺度 FPN 特征 + center-sampling。 | ResNet-50/101 + FPN + DetHead，支持 COCO 数据加载、真损失、NMS 和 COCO mAP。 |
 | **Semantic Segmentation** | 为图像中的像素预测语义类别。 | ResNet-50/101 + SegHead，CE / Dice 损失，MeanIoU 指标。 |
+| **Action Recognition** | 为视频片段预测动作类别，支持 2D CNN + temporal 聚合 (TSN/TSM)、3D CNN (R3D/X3D/SlowFast)、ViT-based (MViT/TimeSformer/VideoMAE)、CLIP-based (X-CLIP/ST-Adapter) 四大范式。 | TSN(ResNet) / TSM(ResNet) / MViTv2 / R3D-18 / MC3-18 / R2Plus1D-18 / S3D / X3D / SlowFast / X-CLIP / ST-Adapter / UniFormerV2 / TimeSformer / VideoMAE。 |
 
 三条任务共用研究基础设施，**模型实现、数据接入、真损失和标准评测指标均已完成端到端闭环**。上方配图是原创概念图，不代表实验结果。
 
@@ -169,6 +170,7 @@ elysia config dump configs/detection/fcos_resnet50_coco.yaml
 | [`fcos`](src/elysia_cv/models/detection/fcos/) | Detection | FCOS-style anchor-free，ResNet + FPN + DetHead，真损失 + NMS + COCO mAP |
 | [`yolo`](src/elysia_cv/models/detection/yolo/) | Detection | YOLOv10/v11/v12/YOLO26 (n/s/m/l/x, 18 variants) + HDMS-YOLO (3 variants)。纯 PyTorch，零 ultralytics。CSPDarkNet+A2C2f+PAN+双头。TAL+CIoU+DFL+BCE。NMS-free (v10)。[方案](../plans/yolo_integration.md) |
 | [`fcn`](src/elysia_cv/models/segmentation/fcn/) | Segmentation | ResNet-50/101 + SegHead，CE / Dice 损失，MeanIoU |
+| [`action_recognition`](src/elysia_cv/models/action_recognition/) | Action Recognition | **16 种视频模型**：TSN/TSM (2D+temporal)、MViTv2 (multi-scale ViT)、R3D/MC3/R2Plus1D/S3D (3D CNN)、X3D (expandable)、SlowFast (dual-pathway)、X-CLIP/ST-Adapter (CLIP-based)、UniFormerV2 (CNN+ViT)、TimeSformer/VideoMAE (transformers)。统一 `model_builder.py` 注册表路由 + `common_video_forward.py` 共享训练逻辑。 |
 
 ### Shared building blocks
 
@@ -201,6 +203,8 @@ elysia config dump configs/detection/fcos_resnet50_coco.yaml
 | **P5 · 训练生态** | Model EMA、MixUp/CutMix/Mosaic、RandomRotation/RandomAffine、PR 曲线、训练曲线、GT vs Pred 可视化、CI/CD、163 tests、52% coverage。 | ✅ |
 | **P6 · 训闭推进** | EarlyStopping (patience 自动终止)、SWA (周期权重平均)、TTA (multi-scale + flip 投票)、ClassBalancedSampler (类平衡采样)、ADE20K/Cityscapes 分割数据集、多任务 Loss 权重配置、FLOPs/参数量分析 (`tools/profile.py`)、CachedDataset (内存/LMDB 缓存)。 | ✅ |
 | **P7 · YOLO 集成** | 纯 PyTorch 自实现 YOLOv10/v11/v12/YOLO26 (n/s/m/l/x) + HDMS-YOLO。21 变体、22 配置 YAML、18 预训练 URL。共享 CSPDarkNet/A2C2f/PAN/DetectHead。Ultralytics-free .pt 权重加载。详见 [方案文档](docs/plans/yolo_integration.md)。 | ✅ |
+| **P8 · 动作识别** | 16 种视频模型全覆盖：TSN/TSM (2D+temporal)、MViTv2 (multi-scale ViT)、R3D/MC3/R2Plus1D/S3D (3D CNN)、X3D (expandable)、SlowFast (dual-pathway)、X-CLIP/ST-Adapter (CLIP-based)、UniFormerV2 (CNN+ViT)、TimeSformer/VideoMAE (transformers)。`model_builder.py` 注册表统一路由 (18 types)、`common_video_forward.py` 共享 loss/logic、VideoDataset (UCF101/Kinetics) 数据加载。 | ✅ |
+| **P9 · 代码质量** | 消除 cli/engine 间 ~420 行重复路由代码、`_cfg_to_dict` __dict__ 遍历替代 manual key whitelist、删除 dead code (simple_cnn.py)、config schema A→B normalize、checkpoint_utils 复用、`_cmd_infer` 分类/检测/视频多模态重写。版本号统一至 v0.5.0。 | ✅ |
 
 状态更新以 [`docs/status/current.md`](docs/status/current.md) 为准。
 
@@ -225,7 +229,7 @@ elysia config dump configs/detection/fcos_resnet50_coco.yaml
 ```text
 ElysiaCV/
 ├── .github/workflows/ci.yml   # CI: lint + test + coverage
-├── configs/                   # 分类 / 检测 / 分割 YAML
+├── configs/                   # 分类 / 检测 / 分割 / 动作识别 YAML
 ├── docs/                      # 指南、架构、状态、README 插画
 │   └── assets/readme/         # 本地 SVG 图形资源
 ├── src/elysia_cv/
@@ -233,15 +237,19 @@ ElysiaCV/
 │   ├── config/                # YAML 解析、校验与配置对象
 │   ├── data/                  # Dataset / Dataloader / Transforms / Prefetcher
 │   ├── models/                # 各任务模型插件与 Runtime
+│   │   └── action_recognition/# 16 种视频模型 (TSN/TSM/MViT/R3D/X3D/SlowFast/...)
 │   ├── components/            # Backbone / Neck / Head
 │   ├── losses/                # 注册式 Loss
 │   ├── metrics/               # 注册式 Metric (MeanAP, MeanIoU, Accuracy)
 │   ├── training/              # Engine、Loop、Hooks、DDP、EMA、MessageHub
 │   ├── optim/                 # Optimizer 与 Scheduler
-│   └── utils/                 # 可视化等工具
+│   ├── utils/                 # 可视化等工具
+│   ├── model_builder.py       # 统一模型路由注册表 (单一事实源)
+│   ├── checkpoint_utils.py    # Checkpoint 自动发现与加载工具
+│   └── cli.py                 # 统一 CLI (train/test/infer/config dump)
 ├── tools/                     # Train / Test / Infer CLI 薄壳入口
 ├── scripts/                   # 实验辅助脚本
-├── tests/                     # 163 个 pytest 测试（10 套文件）
+├── tests/                     # 140+ 个 pytest 测试
 └── pyproject.toml             # 依赖、打包与 CLI 声明
 ```
 

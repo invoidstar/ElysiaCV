@@ -26,8 +26,21 @@ python tools/train.py configs/classification/resnet50_imagenet.yaml
 # 检测
 python tools/train.py configs/detection/fcos_resnet50_coco.yaml
 
+| 任务 | 研究目标 | ... |
+| --- | --- | --- |
+| **Image Classification** | ... |
+| **Object Detection** | ... |
+| **Semantic Segmentation** | ... |
+| **Action Recognition** | TSN/TSM/MViT/R3D/X3D/SlowFast/X-CLIP/ST-Adapter/UniFormerV2/TimeSformer/VideoMAE |
+
+
 # 分割
 python tools/train.py configs/segmentation/fcn_resnet50_ade20k.yaml
+
+# 动作识别（UCF101 / Kinetics 视频理解）
+python tools/train.py configs/action_recognition/tsn_resnet50_ucf101.yaml
+python tools/train.py configs/action_recognition/r3d18_ucf101.yaml
+python tools/train.py configs/action_recognition/xclip_vitb16_ucf101.yaml
 ```
 
 ### 覆盖配置
@@ -175,6 +188,63 @@ ds = CachedDataset(original_dataset,
                    cache_dir="/tmp/my_cache.lmdb",
                    cache_mode="lmdb")                 # 持久化缓存
 ```
+
+### 动作识别训练（视频模型）
+
+ElysiaCV 支持 16 种视频模型，通过 `model_builder.py` 统一注册表路由。所有视频模型共用 `common_video_forward.py` 中的训练/评测逻辑。
+
+```bash
+# 2D CNN + temporal 聚合
+python tools/train.py configs/action_recognition/tsn_resnet50_ucf101.yaml
+python tools/train.py configs/action_recognition/tsm_resnet50_ucf101.yaml
+
+# 3D CNN
+python tools/train.py configs/action_recognition/r3d18_ucf101.yaml
+
+# Multi-scale ViT
+python tools/train.py configs/action_recognition/mvitv2_small_ucf101.yaml
+
+# CLIP-based
+python tools/train.py configs/action_recognition/xclip_vitb16_ucf101.yaml
+python tools/train.py configs/action_recognition/st_adapter_vitb16_ucf101.yaml
+
+# CNN+ViT unified
+python tools/train.py configs/action_recognition/uniformerv2_ucf101.yaml
+
+# X3D
+python tools/train.py configs/action_recognition/x3d_xs_ucf101.yaml
+```
+
+视频数据集配置示例 (UCF101)：
+
+```yaml
+data:
+  train:
+    dataset_name: VIDEO
+    dataset_root: /data/ucf101
+    format: ucf101           # ucf101 | kinetics
+    split: train
+    batch_size: 16
+    num_workers: 4
+    transforms:
+      - type: DecordInit
+      - type: SampleFrames
+        num_frames: 8
+        sampling: random      # random | uniform
+      - type: DecordDecode
+      - type: VideoResize
+        scale: 256
+      - type: VideoRandomCrop
+        size: 224
+      - type: VideoNormalize
+        mean: [0.45, 0.45, 0.45]
+        std: [0.225, 0.225, 0.225]
+      - type: FormatShape
+        input_format: NCHW
+      - type: PackVideoInputs
+```
+
+添加新视频模型只需在 `model_builder.py` 的 `_MODEL_REGISTRY` 中加一行即可，无需修改 `cli.py` 或 `engine.py`。
 
 ### 分割数据集 (ADE20K / Cityscapes)
 

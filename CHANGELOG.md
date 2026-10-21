@@ -2,6 +2,47 @@
 
 All notable changes to ElysiaCV will be documented in this file.
 
+## [0.5.0] — 2026-10-21 · Phase 8: Action Recognition + Phase 9: Code Quality
+
+### Added — Action Recognition (16 video models)
+
+- **2D CNN + Temporal**: TSN (per-frame ResNet + temporal pool), TSM (temporal shift module)
+- **3D CNN**: R3D-18, MC3-18 (mixed 2D+3D), R2Plus1D-18 (R(2+1)D), S3D (separable 3D), X3D (multi-axis expansion, XS-M)
+- **Multi-scale ViT**: MViTv2 (tiny/base variants), Hiera (hierarchical attention)
+- **Dual-pathway**: SlowFast (fast+slow pathway fusion)
+- **CLIP-based**: X-CLIP (frozen CLIP ViT + temporal transformer), ST-Adapter (frozen ViT + 3D conv adapters)
+- **CNN+ViT unified**: UniFormerV2 (early CNN + late ViT stages)
+- **Transformers**: TimeSformer (divided space-time attention, K400-pretrained), VideoMAE (masked autoencoder, K400-pretrained)
+- **VideoDataset**: UCF101 / Kinetics format support, Decord-based frame extraction + SampleFrames + format adapters
+
+### Added — Infrastructure Improvements
+
+- **model_builder.py**: Single-source-of-truth model registry (`_MODEL_REGISTRY`): 18 types in one dict, `build_model_from_config()` dispatches by family flag (video/yolo/detection). Eliminates ~420 lines of duplicated routing between `cli.py` and `engine.py`.
+- **common_video_forward.py**: Shared `forward_train`/`forward_test` for all video models — eliminates copy-paste across 11 runtime.py files.
+- **checkpoint_utils.py**: `find_checkpoint(output_dir)` auto-discovery (best_Accuracy → best → final priority), `load_checkpoint(path, model, device)` with DDP module prefix stripping.
+- **`_cfg_to_dict` passthrough**: `model_builder._cfg_to_dict()` uses `__dict__` traversal instead of manual key whitelist — new model params passed automatically.
+- **Config schema normalization**: `_normalize_config_schema()` flattens `data.{split}.loader.*` → `data.{split}.*` keys; `default_runtime.yaml` switched to Schema B flat keys. Backward-compatible.
+- **`_cmd_infer` multi-modal rewrite**: Now auto-detects model type: classification (top-5 logits), detection (bbox+scores), video (clip-level prediction). No hardcoded torchvision transforms.
+
+### Removed
+
+- **Dead code**: `components/backbones/simple_cnn.py` (no references anywhere)
+- **Duplicated routing**: `engine.py:_build_video_model` + `engine.py:_build_model` if/elif chains (~205 lines)
+
+### Changed
+
+- `cli.py`: `_build_model_from_config` delegates to `model_builder.build_model_from_config()`
+- `engine.py`: `_build_model` delegates to `model_builder`
+- 11 action recognition `runtime.py` files: `forward_train`/`forward_test` imported from `common_video_forward`
+- `config/_base_/default_runtime.yaml`: switched from nested `loader:` to flat Schema B keys
+- `config/loader.py`: added `_normalize_config_schema()` call in `load_cv_config()`
+- `AGENTS.md`, `docs/status/current.md`, `docs/guides/extension.md`: refreshed for v0.5.0
+
+### Tests
+
+- 29 new tests: `tests/test_model_builder.py` (24 tests: registry completeness + model build smoke) + `tests/test_checkpoint_utils.py` (5 tests: auto-discovery, loading, module-prefix stripping)
+- All 140+ regression tests pass
+
 ## [0.4.0] — 2026-10-20 · Phase 7: YOLO Integration
 
 ### Added — YOLO Detection Models (zero ultralytics dependency)

@@ -161,9 +161,13 @@ data:
 |------|------|------|
 | `type` | `str` | 模型插件名称 (如 `resnet50`) |
 | `pretrained_path` | `str` | 预训练权重路径 |
-| `backbone` | `dict` | Backbone 配置 (type + 参数) |
+| `backbone` | `dict` / `str` | Backbone 配置 (分类/检测用 dict；动作识别用 string 如 "resnet50") |
 | `neck` | `dict` | Neck 配置 (检测/分割需要) |
 | `head` | `dict` | Head 配置 (type + 参数) |
+| `variant` | `str` | 模型变体 (YOLO/X3D/SlowFast 等需要) |
+| `num_temp_layers` | `int` | temporal transformer 层数 (X-CLIP) |
+| `adapter_ratio` | `int` | adapter 压缩比 (ST-Adapter) |
+| `freeze_backbone` | `bool` | 冻结 backbone 参数 (X-CLIP/ST-Adapter) |
 
 ### `data` — 数据
 
@@ -172,7 +176,8 @@ data:
 | `train.dataset_root` | `str` | 训练集路径 |
 | `train.batch_size` | `int` | 训练 batch size |
 | `train.num_workers` | `int` | DataLoader worker 数量 |
-| `train.transforms` | `list` | Transform pipeline |
+| `train.transforms` | `list` | Transform pipeline（分类/检测用图像 transforms；动作识别用 DecordInit/SampleFrames/VideoResize 等视频 transforms） |
+| `train.format` | `str` | 视频数据集格式：`ucf101` / `kinetics` |
 | `val.*` | — | 验证集同理 |
 
 ### `engine` — 训练策略

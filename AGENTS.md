@@ -1,13 +1,13 @@
 # AGENTS.md — ElysiaCV
 
 > AI agent 和贡献者：在修改代码之前，请先阅读本文档。
-> 最后更新：2026-10-20
+> 最后更新：2026-10-21
 
 ---
 
 ## 1. 项目概览
 
-ElysiaCV 是一个面向计算机视觉（分类、检测、分割）的统一训练框架。
+ElysiaCV 是一个面向计算机视觉（分类、检测、分割、动作识别）的统一训练框架。
 核心理念：**"让视觉研究聚焦模型，让工程基础设施持续复用"**。
 
 **原则**：
@@ -16,7 +16,7 @@ ElysiaCV 是一个面向计算机视觉（分类、检测、分割）的统一�
 - **组件库**：共享的 Backbone、Neck、Head、Loss、Metric
 - **训练引擎**：TrainerLoop + HookBus（checkpoint/log/evaluation/EMA/early-stopping/SWA/training-curves），支持 DDP / FSDP
 
-**版本**：v0.4.0 Alpha | **Python**：≥3.10 | **PyTorch**：≥2.0
+**版本**：v0.5.0 Alpha | **Python**：≥3.10 | **PyTorch**：≥2.0
 
 ---
 
@@ -43,9 +43,11 @@ ElysiaCV/
 │  ║ │   ├── transforms/  per-sample + batch 级变换 (MixUp/CutMix/Mosaic)║
 │  ║ │   ├── cache.py     CachedDataset (内存/LMDB 数据缓存)       ║
 │  ║ │   └── transforms/tta.py  TTA (multi-scale + flip 投票)     ║
-│  ║ ├── models/         模型契约 + 参考插件 (resnet/fcos/fcn)     ║
+│  ║ ├── models/         模型契约 + 参考插件 (resnet/fcos/fcn/action_recognition)║
 │  ║ ├── training/       训练引擎 (Loop, Hooks, DDP/FSDP, EMA, SWA, Engine)║
 │  ║ ├── utils/          可视化 (PR curves, bbox, segmentation)    ║
+│  ║ ├── model_builder.py 统一模型路由注册表 (18 types, 单一事实源) ║
+│  ║ ├── checkpoint_utils.py Checkpoint 自动发现与加载工具          ║
 │  ║ └── cli.py          统一 CLI (train/test/infer/config dump)   ║
 │  ║                                                              ║
 │  ╚══════════════════════════════════════════════════════════════╝
@@ -62,6 +64,16 @@ ElysiaCV/
 │  ║ ├── models/mlp.yaml .. swin_base.yaml   模型定义 (9 个)       ║
 │  ║ ├── datasets/cassava.yaml              Cassava 数据集         ║
 │  ║ │        ade20k.yaml / cityscapes.yaml  分割数据集             ║
+│  ║ ├── action_recognition/                动作识别 model + base  ║
+│  ║ │   ├── _base_/video_base.yaml         视频训练 base config    ║
+│  ║ │   ├── tsn_resnet50_ucf101.yaml       TSN                    ║
+│  ║ │   ├── tsm_resnet50_ucf101.yaml       TSM                    ║
+│  ║ │   ├── mvitv2_small_ucf101.yaml       MViTv2                 ║
+│  ║ │   ├── r3d18_ucf101.yaml              R3D-18                 ║
+│  ║ │   ├── x3d_xs_ucf101.yaml             X3D                    ║
+│  ║ │   ├── xclip_vitb16_ucf101.yaml       X-CLIP                 ║
+│  ║ │   ├── st_adapter_vitb16_ucf101.yaml  ST-Adapter             ║
+│  ║ │   └── uniformerv2_ucf101.yaml        UniFormerV2            ║
 │  ║ └── experiments/cassava_*.yaml +       实验组合 (9+2 个)      ║
 │  ║        ade20k_fcn_r50.yaml /                                    ║
 │  ║        cityscapes_fcn_r50.yaml                                  ║
@@ -288,5 +300,7 @@ style:    格式化、lint（不改变代码逻辑）
 | Model EMA | ✅ | 影子权重 + ramp-up decay + apply_shadow/restore，eval 自动切换 |
 | PR 曲线 & 训练曲线 | ✅ | `plot_pr_curves()` / `MetricHistory` Hook → PNG |
 | CI/CD | ✅ | GitHub Actions: lint + test + coverage (≥30%) |
+| Action Recognition (16 models) | ✅ | TSN/TSM/MViT/R3D/MC3/R2Plus1D/S3D/X3D/SlowFast/X-CLIP/ST-Adapter/UniFormerV2/TimeSformer/VideoMAE, VideoDataset, model_builder registry, common_video_forward |
+| Code Quality Refactor | ✅ | Eliminated ~420 lines duplicate routing, _cfg_to_dict passthrough, config schema normalize, checkpoint_utils, _cmd_infer multi-modal |
 
 详见 `docs/status/current.md`。
