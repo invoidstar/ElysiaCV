@@ -12,7 +12,7 @@
   <p>
     <a href="pyproject.toml"><img src="docs/assets/readme/badge-python.svg" height="28" alt="Python 3.10+" /></a>
     <a href="pyproject.toml"><img src="docs/assets/readme/badge-pytorch.svg" height="28" alt="Backend PyTorch" /></a>
-    <a href="docs/status/current.md"><img src="docs/assets/readme/badge-version.svg" height="28" alt="Version 0.2.0 Alpha" /></a>
+    <a href="docs/status/current.md"><img src="docs/assets/readme/badge-version.svg" height="28" alt="Version 0.4.0 Alpha" /></a>
     <a href="LICENSE"><img src="docs/assets/readme/badge-license.svg" height="28" alt="Apache-2.0 License" /></a>
     <a href=".github/workflows/ci.yml"><img src="https://github.com/invoidstar/ElysiaCV/actions/workflows/ci.yml/badge.svg" height="28" alt="CI status" /></a>
   </p>

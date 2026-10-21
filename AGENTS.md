@@ -16,7 +16,7 @@ ElysiaCV 是一个面向计算机视觉（分类、检测、分割）的统一�
 - **组件库**：共享的 Backbone、Neck、Head、Loss、Metric
 - **训练引擎**：TrainerLoop + HookBus（checkpoint/log/evaluation/EMA/early-stopping/SWA/training-curves），支持 DDP / FSDP
 
-**版本**：v0.3.0 Alpha | **Python**：≥3.10 | **PyTorch**：≥2.0
+**版本**：v0.4.0 Alpha | **Python**：≥3.10 | **PyTorch**：≥2.0
 
 ---
 

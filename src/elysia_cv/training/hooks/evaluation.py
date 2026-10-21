@@ -147,7 +147,10 @@ class EvalHook(Hook):
         if first_batch is not None:
             try:
                 outputs = model(first_batch["inputs"].to(device))
-                if isinstance(outputs, dict) and "cls_score" in outputs:
+                if isinstance(outputs, dict) and (
+                    "cls_score" in outputs or "cls_scores" in outputs
+                    or getattr(model, "_is_yolo", False)
+                ):
                     is_detection = True
             except Exception:
                 pass
@@ -209,12 +212,23 @@ class EvalHook(Hook):
         return results
 
     def _evaluate_detection(self, model, device, metric_instances) -> dict[str, float]:
-        """Detection evaluation using forward_test + decode + per-image metric update."""
-        from elysia_cv.models.detection.fcos.runtime import forward_test
+        """Detection evaluation — routes to YOLO or FCOS forward_test.
+
+        YOLO models return ``pred_instances`` as ``list[Tensor(N,6)]`` (xyxy+score+label).
+        FCOS models return ``pred_instances`` as ``list[dict]`` (bboxes/scores/labels keys).
+        """
+        is_yolo = getattr(model, "_is_yolo", False)
+
+        if is_yolo:
+            from elysia_cv.models.detection.yolo.runtime import forward_test as yolo_forward_test
+            forward_test_fn = yolo_forward_test
+        else:
+            from elysia_cv.models.detection.fcos.runtime import forward_test as fcos_forward_test
+            forward_test_fn = fcos_forward_test
 
         with torch.no_grad():
             for batch in self.dataloader:
-                outputs = forward_test(model, batch, device=device)
+                outputs = forward_test_fn(model, batch, device=device)
                 preds = outputs.get("pred_instances", [])
                 gt_bboxes = batch.get("gt_bboxes", [])
                 gt_labels = batch.get("gt_labels", [])
@@ -222,15 +236,31 @@ class EvalHook(Hook):
                 for i in range(len(preds)):
                     for m in metric_instances:
                         try:
-                            m.update(
-                                pred_boxes=preds[i]["bboxes"].to(device),
-                                pred_scores=preds[i]["scores"].to(device),
-                                pred_labels=preds[i]["labels"].to(device),
-                                gt_boxes=gt_bboxes[i].to(device)
-                                if isinstance(gt_bboxes[i], torch.Tensor) else gt_bboxes[i],
-                                gt_labels=gt_labels[i].to(device)
-                                if isinstance(gt_labels[i], torch.Tensor) else gt_labels[i],
-                            )
+                            if is_yolo:
+                                # YOLO: preds[i] is Tensor [N,6] (x1,y1,x2,y2,score,label)
+                                det = preds[i]
+                                if det.numel() == 0:
+                                    continue
+                                m.update(
+                                    pred_boxes=det[:, :4].to(device),
+                                    pred_scores=det[:, 4].to(device),
+                                    pred_labels=det[:, 5].long().to(device),
+                                    gt_boxes=gt_bboxes[i].to(device)
+                                    if isinstance(gt_bboxes[i], torch.Tensor) else gt_bboxes[i],
+                                    gt_labels=gt_labels[i].to(device)
+                                    if isinstance(gt_labels[i], torch.Tensor) else gt_labels[i],
+                                )
+                            else:
+                                # FCOS: preds[i] is dict with bboxes/scores/labels
+                                m.update(
+                                    pred_boxes=preds[i]["bboxes"].to(device),
+                                    pred_scores=preds[i]["scores"].to(device),
+                                    pred_labels=preds[i]["labels"].to(device),
+                                    gt_boxes=gt_bboxes[i].to(device)
+                                    if isinstance(gt_bboxes[i], torch.Tensor) else gt_bboxes[i],
+                                    gt_labels=gt_labels[i].to(device)
+                                    if isinstance(gt_labels[i], torch.Tensor) else gt_labels[i],
+                                )
                         except Exception:
                             pass
 

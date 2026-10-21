@@ -30,32 +30,29 @@ engine:
     grad_clip_norm: null
     optimizer_zero_grad_set_to_none: true
 
-# Dataloader defaults — from ElysiaRobot validated settings
+# Dataloader defaults — flat keys (Schema B), normalized by config loader
 data:
   train:
-    loader:
-      batch_size: 32
-      num_workers: 2
-      prefetch_factor: 2
-      pin_memory: true
-      persistent_workers: true
-      drop_last: false
+    batch_size: 32
+    num_workers: 2
+    prefetch_factor: 2
+    pin_memory: true
+    persistent_workers: true
+    drop_last: false
   val:
-    loader:
-      batch_size: 32
-      num_workers: 2
-      prefetch_factor: 2
-      pin_memory: true
-      persistent_workers: false
-      drop_last: false
+    batch_size: 32
+    num_workers: 2
+    prefetch_factor: 2
+    pin_memory: true
+    persistent_workers: false
+    drop_last: false
   test:
-    loader:
-      batch_size: 1
-      num_workers: 2
-      prefetch_factor: 2
-      pin_memory: true
-      persistent_workers: false
-      drop_last: false
+    batch_size: 1
+    num_workers: 2
+    prefetch_factor: 2
+    pin_memory: true
+    persistent_workers: false
+    drop_last: false
 
 tracking:
   log_freq: 50

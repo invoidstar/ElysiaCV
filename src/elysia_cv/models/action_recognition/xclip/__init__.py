@@ -1,0 +1,1 @@
+"""X-CLIP — CLIP ViT + temporal cross-attention (ECCV 2022)."""

@@ -1,6 +1,6 @@
 # 当前工程状态
 
-> **ElysiaCV v0.3.0（Alpha）** · 最近核对：2026-10-20 · 以 `main` 分支实际代码为依据。
+> **ElysiaCV v0.4.0（Alpha）** · 最近核对：2026-10-21 · 以 `main` 分支实际代码为依据。
 
 ## ✅ 已完成
 
@@ -33,8 +33,10 @@
 | **训练曲线** | `MetricHistory` Hook：记录评测指标历史，训练结束输出 `analysis/training_curves.png` |
 | **MessageHub** | 全局标量状态总线：`update_scalar`/`get_all_scalars`/best-value 追踪 |
 | **CI/CD** | `.github/workflows/ci.yml`：3 job（lint + test py3.10/3.11 + coverage ≥30%） |
-| **测试** | 140 个 pytest 测试、覆盖率 52% |
+| **测试** | 140+ pytest 测试、覆盖率 52% |
 | **项目分离** | `projects/HERBS/`：scripts + tools + DDP launcher |
+| **动作识别** | 16 种视频模型：TSN/TSM/MViT/R3D/MC3/R2Plus1D/S3D/X3D/SlowFast/X-CLIP/ST-Adapter/UniFormerV2/TimeSformer/VideoMAE；Shared `model_builder.py` 统一路由 + `common_video_forward.py` 共享 forward_train/forward_test |
+| **重构** | model_builder 注册表消除 cli.py/engine.py 重复路由；checkpoint_utils.py 统一 checkpoint 发现/加载；config 加载器 normalize Schema A→B；`_cmd_infer` 支持分类/检测/视频推理 |
 
 ## ⚠️ 尚未闭环
 
@@ -55,12 +57,14 @@
 | **Phase 5 · 训练生态** | Model EMA、MixUp/CutMix/Mosaic、RandomRotation/RandomAffine、PR 曲线、训练曲线、GT vs Pred 可视化、CI/CD、163 tests、52% coverage | ✅ |
 | **Phase 6 · 训闭推进** | EarlyStopping、SWA、TTA、ClassBalancedSampler、ADE20K/Cityscapes 数据集、多任务 Loss 权重配置、FLOPs 分析、CachedDataset | ✅ |
 | **Phase 7 · YOLO 集成** | 纯 PyTorch 自实现 YOLOv10/v11/v12/YOLO26 (n/s/m/l/x) + HDMS-YOLO。21 变体、22 配置 YAML、18 预训练 URL。Ultralytics-free .pt 权重加载。140 tests pass。 | ✅ |
+| **Phase 8 · 动作识别** | 16 种视频模型全覆盖、model_builder 注册表统一路由、common_video_forward 共享 loss 逻辑、config schema 统一、checkpoint_utils 复用、_cmd_infer 多模态推理 | ✅ |
+| **Phase 9 · 代码质量** | 消除 ~420 行重复路由代码、删除 dead code (simple_cnn.py)、统一版本号、刷新过期文档 | ✅ |
 
 ## 进行中 / 已规划
 
 | 阶段 | 重点 | 状态 |
 |------|------|------|
-| **Phase 8 · 数据生态** | CropAndWeed / PlantVillage 农业数据集接入，COCO 全量训练验证 | 📅 |
+| **Phase 10 · 数据生态** | CropAndWeed / PlantVillage 农业数据集接入，COCO 全量训练验证 | 📅 |
 
 ## 相关资料
 

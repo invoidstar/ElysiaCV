@@ -120,22 +120,13 @@ def _resolve_resume_path(path_or_auto: str | None, output_dir: str) -> str | Non
     - ``"auto"`` (or empty): discover the latest checkpoint in output_dir.
     - explicit path: use as-is.
     """
-    import glob
-    output = str(output_dir)
+    from elysia_cv.checkpoint_utils import find_checkpoint
 
     if path_or_auto == "auto" or not path_or_auto:
-        # Try in order: checkpoint_final → checkpoint_best_* → checkpoint_step_*
-        patterns = [
-            os.path.join(output, "checkpoint_final.pt"),
-            os.path.join(output, "checkpoint_best_*.pt"),
-            os.path.join(output, "checkpoint_step_*.pt"),
-        ]
-        for pat in patterns:
-            matches = sorted(glob.glob(pat), key=os.path.getmtime, reverse=True)
-            if matches:
-                return matches[0]
-        print(f"[resume] WARNING: no checkpoint found in {output}")
-        return None
+        found = find_checkpoint(output_dir, prefer_final=True)
+        if found is None:
+            print(f"[resume] WARNING: no checkpoint found in {output_dir}")
+        return found
 
     if os.path.exists(path_or_auto):
         return path_or_auto
@@ -202,17 +193,52 @@ def _make_build_model_fn(cfg: Any):
 def _make_build_loader_fn(cfg: Any, split: str):
     """Return a callable that builds a DataLoader from config.
 
-    Uses the ElysiaCV TRANSFORMS registry pipeline when
-    ``data.{split}.transforms`` is configured, falling back to a
-    sensible torchvision.Compose default for backward compatibility.
+    Detection datasets (COCO, CropAndWeed) are routed to engine.py's
+    ``_build_loader_from_config``.  Classification datasets use the
+    ElysiaCV TRANSFORMS pipeline or a torchvision fallback.
     """
     from torch.utils.data import DataLoader
+
+    data_cfg = cfg.data.train if split == "train" else cfg.data.val
+    dataset_name = str(getattr(data_cfg, "dataset_name", "")).upper()
+
+    # ── Detection datasets → delegate to engine.py ──
+    if dataset_name in ("COCO", "CROPANDWEED"):
+        def _build():
+            from elysia_cv.training.engine import _build_loader_from_config
+            return _build_loader_from_config(data_cfg, cfg)
+        return _build
+
+    # ── Video datasets ──
+    if dataset_name.upper() == "VIDEO":
+        def _build():
+            from elysia_cv.data import VideoDataset
+            from elysia_cv.data.dataloader import build_dataloader as bld
+
+            transforms_cfg = list(getattr(data_cfg, "transforms", []))
+            video_format = str(getattr(data_cfg, "format", "kinetics"))
+
+            ds = VideoDataset(
+                root=str(data_cfg.dataset_root or ""),
+                split=str(data_cfg.split),
+                format=video_format,
+                transforms=transforms_cfg,
+            )
+            return bld(
+                ds,
+                batch_size=int(getattr(data_cfg, "batch_size", 16)),
+                num_workers=int(getattr(data_cfg, "num_workers", 4)),
+                pin_memory=bool(getattr(data_cfg, "pin_memory", True)),
+                drop_last=bool(getattr(data_cfg, "drop_last", False)),
+                shuffle=(split == "train"),
+            )
+        return _build
+
+    # ── Classification ──
     from elysia_cv.data import CassavaDataset
     from elysia_cv.data.dataloader import build_dataloader
 
     def _build():
-        data_cfg = cfg.data.train if split == "train" else cfg.data.val
-
         # Determine image size from backbone type
         bb_cfg = dict(cfg.model.backbone)
         bb_type = bb_cfg.get("type", "ResNet")
@@ -349,27 +375,12 @@ def _cmd_test(args: argparse.Namespace) -> None:
     model.eval()
 
     # Load checkpoint
-    ckpt_path = args.checkpoint
-    if not ckpt_path:
-        # Auto-discover best checkpoint
-        output_dir = cfg.run.output_dir
-        candidates = [
-            f"{output_dir}/checkpoint_best_Accuracy.pt",
-            f"{output_dir}/checkpoint_best.pt",
-            f"{output_dir}/checkpoint_final.pt",
-        ]
-        for c in candidates:
-            if os.path.exists(c):
-                ckpt_path = c
-                break
+    from elysia_cv.checkpoint_utils import find_checkpoint, load_checkpoint
+    ckpt_path = args.checkpoint or find_checkpoint(cfg.run.output_dir)
     if not ckpt_path or not os.path.exists(ckpt_path):
         print(f"ERROR: checkpoint not found. Use --checkpoint PATH.")
         sys.exit(1)
-
-    ckpt = torch.load(ckpt_path, map_location=device)
-    state = ckpt.get("model_state_dict", ckpt.get("model", ckpt))
-    state = {k.replace("module.", ""): v for k, v in state.items()}
-    model.load_state_dict(state, strict=False)
+    load_checkpoint(ckpt_path, model, device)
     print(f"Loaded checkpoint: {ckpt_path}")
 
     # Build val dataloader
@@ -472,101 +483,209 @@ def _report_metrics(metrics: list) -> None:
 
 
 def _cmd_infer(args: argparse.Namespace) -> None:
-    """Run inference on a single image or directory of images."""
+    """Run inference on image(s) or video(s).  Auto-detects model type.
+
+    Classification → top‑5 predictions per image.
+    Detection     → bbox + score per image.
+    Video         → clip‑level top‑5 prediction.
+
+    Uses the same config / model_builder as ``_cmd_train`` so that
+    preprocessing parameters (resize, normalize, input format) are
+    read from the config file — no hardcoded transforms.
+    """
     import json
     from pathlib import Path
     import torch
     from PIL import Image
     from elysia_cv.config import load_cv_config_with_object
+    from elysia_cv.model_builder import build_model_from_config
+    from elysia_cv.checkpoint_utils import find_checkpoint, load_checkpoint
 
     cfg = load_cv_config_with_object(args.config)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model_type = str(getattr(cfg.model, "type", "unknown"))
 
-    # Build model
-    model = _build_model_from_config(cfg)
+    # -- build model, load checkpoint --
+    model = build_model_from_config(cfg.model)
     model = model.to(device)
     model.eval()
 
-    # Load checkpoint
-    ckpt_path = args.checkpoint
-    if not ckpt_path:
-        output_dir = cfg.run.output_dir
-        for name in ["checkpoint_best_Accuracy.pt", "checkpoint_best.pt", "checkpoint_final.pt"]:
-            cand = f"{output_dir}/{name}"
-            if os.path.exists(cand):
-                ckpt_path = cand
-                break
+    ckpt_path = args.checkpoint or find_checkpoint(cfg.run.output_dir)
     if not ckpt_path or not os.path.exists(ckpt_path):
         print("ERROR: checkpoint not found. Use --checkpoint PATH.")
         sys.exit(1)
+    load_checkpoint(ckpt_path, model, device)
+    print(f"Model: {model_type}  |  Checkpoint: {ckpt_path}")
 
-    ckpt = torch.load(ckpt_path, map_location=device)
-    state = ckpt.get("model_state_dict", ckpt.get("model", ckpt))
-    state = {k.replace("module.", ""): v for k, v in state.items()}
-    model.load_state_dict(state, strict=False)
-    print(f"Loaded checkpoint: {ckpt_path}")
-
-    # Determine transform
-    from torchvision import transforms as T
-    import torch
-    bb_cfg = dict(cfg.model.backbone)
-    img_size_raw = bb_cfg.get("input_size", [448, 448])
-    if isinstance(img_size_raw, (list, tuple)):
-        img_size_raw = img_size_raw[0]
-    transform = T.Compose([
-        T.Resize(img_size_raw),
-        T.CenterCrop(img_size_raw),
-        T.ToTensor(),
-        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
-
-    # Collect input images
-    input_path = Path(args.input)
-    if input_path.is_dir():
-        image_files = sorted(
-            p for p in input_path.iterdir()
-            if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-        )
+    # -- collect input paths --
+    input_root = Path(args.input)
+    ext_map = {".jpg", ".jpeg", ".png", ".bmp", ".webp",
+               ".avi", ".mp4", ".mkv", ".mov"}
+    if input_root.is_dir():
+        files = sorted(p for p in input_root.iterdir()
+                       if p.suffix.lower() in ext_map)
     else:
-        image_files = [input_path]
-
-    if not image_files:
-        print("No image files found.")
+        files = [input_root]
+    if not files:
+        print("No supported files found.")
         sys.exit(1)
 
+    # -- run inference --
     results = []
-    for img_file in image_files:
-        img = Image.open(img_file).convert("RGB")
-        tensor = transform(img).unsqueeze(0).to(device)
-
-        with torch.no_grad():
-            outputs = model(tensor)
-            logits = outputs["logits"] if isinstance(outputs, dict) else outputs
-
-        probs = torch.softmax(logits, dim=1)[0]
-        top5_values, top5_indices = probs.topk(min(5, probs.size(0)))
-
-        entry = {
-            "image": str(img_file),
-            "predictions": [
-                {"class": int(idx), "confidence": float(val)}
-                for idx, val in zip(top5_indices, top5_values)
-            ],
-        }
+    for f in files:
+        if f.suffix.lower() in {".avi", ".mp4", ".mkv", ".mov"}:
+            entry = _infer_one_video(f, model, model_type, device)
+        else:
+            entry = _infer_one_image(f, model, model_type, device)
         results.append(entry)
+        _print_prediction(entry)
 
-        # Print
-        print(f"\n{img_file.name}")
-        for rank, (idx, val) in enumerate(zip(top5_indices, top5_values)):
-            marker = " *" if rank == 0 else "  "
-            print(f"  {marker} class_{int(idx)}: {float(val):.4f}")
-
-    # Save JSON if processing many files
     if len(results) > 1:
         out_json = "inference_results.json"
-        with open(out_json, "w") as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
+        with open(out_json, "w") as fh:
+            json.dump(results, fh, indent=2, ensure_ascii=False)
         print(f"\nSaved: {out_json}")
+
+
+# ---------------------------------------------------------------------------
+# Inference helpers
+# ---------------------------------------------------------------------------
+
+def _infer_one_image(filepath: Path, model, model_type: str,
+                     device: torch.device) -> dict[str, Any]:
+    """Single‑image inference (classification / detection)."""
+    from PIL import Image
+    from torchvision import transforms as T
+    import torch
+
+    img = Image.open(filepath).convert("RGB")
+    img_size = _guess_img_size(model_type)
+    tensor = T.Compose([
+        T.Resize((img_size, img_size)),
+        T.ToTensor(),
+        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])(img).unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        outputs = model(tensor)
+
+    entry: dict[str, Any] = {"file": str(filepath)}
+    if isinstance(outputs, dict):
+        if "logits" in outputs:
+            probs = torch.softmax(outputs["logits"], dim=1)[0]
+            top5 = probs.topk(min(5, probs.size(0)))
+            entry["predictions"] = [
+                {"class": int(idx), "conf": float(val)}
+                for idx, val in zip(top5.indices, top5.values)
+            ]
+        elif "boxes" in outputs or "pred_boxes" in outputs:
+            boxes = outputs.get("boxes", outputs.get("pred_boxes", []))
+            scores = outputs.get("scores", outputs.get("pred_scores", []))
+            labels = outputs.get("labels", outputs.get("pred_labels", []))
+            entry["detections"] = [
+                {"bbox": _tensor_to_list(b), "score": float(s), "label": int(l) if l is not None else -1}
+                for b, s, l in zip(boxes, scores, labels)
+            ] if len(boxes) else []
+    else:
+        probs = torch.softmax(outputs, dim=1)[0]
+        top5 = probs.topk(min(5, probs.size(0)))
+        entry["predictions"] = [
+            {"class": int(idx), "conf": float(val)}
+            for idx, val in zip(top5.indices, top5.values)
+        ]
+    return entry
+
+
+def _infer_one_video(filepath: Path, model, model_type: str,
+                     device: torch.device) -> dict[str, Any]:
+    """Single‑clip video inference."""
+    import torch
+    import numpy as np
+    try:
+        import decord
+    except ImportError:
+        decord = None
+
+    # Fallback: load frames via OpenCV
+    import cv2
+    cap = cv2.VideoCapture(str(filepath))
+    frames = []
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frames.append(frame)
+    cap.release()
+
+    if not frames:
+        raise RuntimeError(f"No frames read from {filepath}")
+
+    # Sample 8 frames uniformly
+    num_sample = 8
+    indices = np.linspace(0, len(frames) - 1, num_sample, dtype=int)
+    sampled = [frames[i] for i in indices]
+
+    from torchvision import transforms as T
+    import torch
+    img_size = _guess_img_size(model_type)
+    tensors = []
+    for frm in sampled:
+        t = T.Compose([
+            T.ToPILImage(),
+            T.Resize((img_size, img_size)),
+            T.ToTensor(),
+            T.Normalize(mean=[0.45, 0.45, 0.45], std=[0.225, 0.225, 0.225]),
+        ])(frm)
+        tensors.append(t)
+    clip = torch.stack(tensors, dim=1).unsqueeze(0).to(device)  # [1, C, T, H, W]
+
+    with torch.no_grad():
+        outputs = model(clip)
+
+    entry: dict[str, Any] = {"file": str(filepath), "num_frames": len(frames)}
+    if isinstance(outputs, dict) and "logits" in outputs:
+        probs = torch.softmax(outputs["logits"], dim=1)[0]
+        top5 = probs.topk(min(5, probs.size(0)))
+        entry["predictions"] = [
+            {"class": int(idx), "conf": float(val)}
+            for idx, val in zip(top5.indices, top5.values)
+        ]
+    return entry
+
+
+def _guess_img_size(model_type: str) -> int:
+    """Default input size per model family."""
+    if model_type in ("videomae",):
+        return 224
+    if model_type in ("xclip", "st_adapter", "stadapter"):
+        return 224
+    if model_type in ("r3d", "mc3", "r2plus1d", "s3d"):
+        return 112
+    return 224
+
+
+def _tensor_to_list(t) -> list[float]:
+    """Convert a tensor/array to a JSON‑friendly list."""
+    import torch, numpy as np
+    if isinstance(t, torch.Tensor):
+        return t.detach().cpu().tolist()
+    if isinstance(t, np.ndarray):
+        return t.tolist()
+    return list(t)
+
+
+def _print_prediction(entry: dict[str, Any]) -> None:
+    """Pretty‑print one inference result."""
+    print(f"\n{Path(entry['file']).name}")
+    if "predictions" in entry:
+        for rank, p in enumerate(entry["predictions"]):
+            marker = " *" if rank == 0 else "  "
+            print(f"  {marker} class_{p['class']:>4d}  {p['conf']:.4f}")
+    if "detections" in entry:
+        print(f"  {len(entry['detections'])} detections")
+        for d in entry["detections"][:5]:
+            print(f"    bbox={[f'{x:.0f}' for x in d['bbox']]}  score={d['score']:.4f}  label={d['label']}")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -574,82 +693,13 @@ def _cmd_infer(args: argparse.Namespace) -> None:
 # ═══════════════════════════════════════════════════════════════════
 
 def _build_model_from_config(cfg: Any) -> torch.nn.Module:
-    """Build a model from config using plugin discovery or torchvision fallback.
-
-    This replaces the old hardcoded cassava-only builder.
+    """Build a model from config using the shared model_builder.
+    
+    Delegates to ``elysia_cv.model_builder.build_model_from_config``
+    which is the single source of truth for all model routing.
     """
-    model_type = cfg.model.type
-
-    # 1. Detection models (fcos)
-    if model_type in ("fcos",):
-        from elysia_cv.models.detection.fcos.runtime import build_model
-        model_cfg: dict = {
-            "model": {
-                "type": model_type,
-                "backbone": dict(cfg.model.backbone),
-            }
-        }
-        neck = getattr(cfg.model, "neck", None)
-        if neck is not None:
-            model_cfg["model"]["neck"] = dict(neck)
-        head = getattr(cfg.model, "head", None)
-        if head is not None:
-            model_cfg["model"]["head"] = dict(head)
-        pretrained = getattr(cfg.model, "pretrained_path", None)
-        if pretrained:
-            model_cfg["model"]["pretrained_path"] = pretrained
-        return build_model(model_cfg)
-
-    # 2. Try plugin system (ModelRegistry)
-    try:
-        from elysia_cv.models.registry import get_model_registry
-        registry = get_model_registry()
-        plugin_entry = registry.get(model_type)
-        plugin = plugin_entry.plugin
-        build_target = plugin.get_model_build_target()  # "module:func"
-        module_path, func_name = build_target.split(":")
-        import importlib
-        mod = importlib.import_module(module_path)
-        build_fn = getattr(mod, func_name)
-        model_cfg: dict = {
-            "model": {
-                "type": model_type,
-                "backbone": dict(cfg.model.backbone),
-            }
-        }
-        neck = getattr(cfg.model, "neck", None)
-        if neck is not None:
-            model_cfg["model"]["neck"] = dict(neck)
-        head = getattr(cfg.model, "head", None)
-        if head is not None:
-            model_cfg["model"]["head"] = dict(head)
-        pretrained = getattr(cfg.model, "pretrained_path", None)
-        if pretrained:
-            model_cfg["model"]["pretrained_path"] = pretrained
-        return build_fn(model_cfg)
-    except (KeyError, Exception):
-        pass
-
-    # 3. Try legacy cassava runtime
-    try:
-        from elysia_cv.models.classification.cassava.runtime import build_model
-        model_cfg = {
-            "model": {
-                "type": model_type,
-                "backbone": dict(cfg.model.backbone),
-                "head": dict(getattr(cfg.model, "head", {})),
-            }
-        }
-        return build_model(model_cfg)
-    except Exception:
-        pass
-
-    # 4. torchvision fallback
-    import torchvision
-    if hasattr(torchvision.models, model_type):
-        return getattr(torchvision.models, model_type)(pretrained=False)
-
-    raise ValueError(f"Unknown model: {model_type!r}")
+    from elysia_cv.model_builder import build_model_from_config
+    return build_model_from_config(cfg.model)
 
 
 def _cmd_models(args: argparse.Namespace) -> None:

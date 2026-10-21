@@ -205,16 +205,6 @@ run:
 
 data:
   train:
-    loader:
-      batch_size: 32
-
-eval:
-  eval_freq: 1000
-  save_best: Accuracy
-  save_final: true
-
-data:
-  train:
     dataset_root: /data/imagenet/train
     batch_size: 32
     transforms:
@@ -244,6 +234,8 @@ schedule:
 
 eval:
   eval_freq: 5000
+  save_best: Accuracy
+  save_final: true
   metrics:
     - Accuracy
 ```

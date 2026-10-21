@@ -1,0 +1,1 @@
+"""ST-Adapter — Frozen ViT + 3D conv adapters (ICLR 2023)."""

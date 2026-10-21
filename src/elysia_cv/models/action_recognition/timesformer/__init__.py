@@ -1,0 +1,1 @@
+"""TimeSformer — Divided space-time attention (ICML 2021)."""

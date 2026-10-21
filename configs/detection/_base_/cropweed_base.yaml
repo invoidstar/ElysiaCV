@@ -1,0 +1,85 @@
+# CropAndWeed shared base config — inherits YOLO detection settings,
+# overrides dataset and budget parameters.  Per-experiment configs only
+# need to set: model.variant, model.num_classes, data.*.label_mode,
+# run.name, run.output_dir.
+#
+# Usage:
+#   python tools/train.py configs/detection/_base_/cropweed_base.yaml \
+#       --set model.variant=yolov11n model.num_classes=84 \
+#            data.train.label_mode=full data.val.label_mode=full \
+#            run.name=yolo11n_84 run.output_dir=./outputs/checkpoints/cropweed84/yolo11n
+
+_base_: ["yolo_base.yaml"]
+
+run:
+  name: cropweed
+  output_dir: ./outputs/checkpoints/cropweed
+  seed: 42
+
+model:
+  variant: yolov11n
+  num_classes: 84
+  pretrained: false
+  loss_weights:
+    cls: 1.0
+    box: 7.5
+    dfl: 1.5
+
+data:
+  train:
+    dataset_name: CROPANDWEED
+    dataset_root: /data/hdd3/chuqi/data/datasets/CropAndWeed
+    split: train
+    label_mode: full
+    transforms:
+      - type: LoadImageFromFile
+      - type: LoadAnnotations
+      - type: Resize
+        scale: [640, 640]
+        keep_ratio: false
+      - type: RandomFlip
+        prob: 0.5
+      - type: Normalize
+        mean: [0.0, 0.0, 0.0]
+        std: [255.0, 255.0, 255.0]
+      - type: PackDetInputs
+  val:
+    dataset_name: CROPANDWEED
+    dataset_root: /data/hdd3/chuqi/data/datasets/CropAndWeed
+    split: val
+    label_mode: full
+    transforms:
+      - type: LoadImageFromFile
+      - type: LoadAnnotations
+      - type: Resize
+        scale: [640, 640]
+        keep_ratio: false
+      - type: Normalize
+        mean: [0.0, 0.0, 0.0]
+        std: [255.0, 255.0, 255.0]
+      - type: PackDetInputs
+
+engine:
+  max_epochs: 50
+
+optim:
+  type: AdamW
+  params:
+    lr: 0.001
+    weight_decay: 0.0005
+
+schedule:
+  type: CosineAnnealing
+  params:
+    T_max: 50
+    eta_min: 0.00001
+  warmup_steps: 500
+  warmup_start_lr: 0.0
+
+eval:
+  eval_freq: 3510
+  metrics:
+    - type: MeanAP
+      num_classes: 84
+  save_best: mAP
+  save_final: true

@@ -1,4 +1,4 @@
-_base_: ["../_base_/yolo_base.yaml"]
+_base_: ["_base_/yolo_base.yaml"]
 
 run:
   name: yolo11l_coco

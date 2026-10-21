@@ -1,0 +1,1 @@
+"""VideoMAE — Masked autoencoder for video (NeurIPS 2022)."""

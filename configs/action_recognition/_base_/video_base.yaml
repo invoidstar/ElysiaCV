@@ -1,0 +1,107 @@
+# Base config for action recognition training.
+#
+# Usage:
+#   python tools/train.py configs/action_recognition/tsn_resnet50_ucf101.yaml
+#   python tools/train.py configs/action_recognition/tsm_resnet50_ucf101.yaml
+#   python tools/train.py configs/action_recognition/mvitv2_small_kinetics.yaml
+
+run:
+  name: action_recognition
+  output_dir: ./outputs/checkpoints/action_recognition
+  seed: 42
+
+model:
+  type: tsn
+  backbone: resnet50
+  num_classes: 101
+  pretrained: true
+  dropout: 0.5
+
+data:
+  train:
+    dataset_name: VIDEO
+    dataset_root: /data/ucf101
+    format: ucf101
+    split: train
+    batch_size: 16
+    num_workers: 4
+    pin_memory: true
+    drop_last: false
+    transforms:
+      - type: DecordInit
+        num_threads: 1
+      - type: SampleFrames
+        num_frames: 8
+        sampling: random
+      - type: DecordDecode
+      - type: VideoResize
+        scale: 256
+        keep_ratio: true
+      - type: VideoRandomCrop
+        size: 224
+      - type: VideoRandomHorizontalFlip
+        prob: 0.5
+      - type: VideoNormalize
+        mean: [0.45, 0.45, 0.45]
+        std: [0.225, 0.225, 0.225]
+      - type: FormatShape
+        input_format: NCHW
+      - type: PackVideoInputs
+  val:
+    dataset_name: VIDEO
+    dataset_root: /data/ucf101
+    format: ucf101
+    split: val
+    batch_size: 8
+    num_workers: 2
+    pin_memory: true
+    drop_last: false
+    transforms:
+      - type: DecordInit
+        num_threads: 1
+      - type: SampleFrames
+        num_frames: 8
+        sampling: uniform
+      - type: DecordDecode
+      - type: VideoResize
+        scale: 256
+        keep_ratio: true
+      - type: VideoCenterCrop
+        size: 224
+      - type: VideoNormalize
+        mean: [0.45, 0.45, 0.45]
+        std: [0.225, 0.225, 0.225]
+      - type: FormatShape
+        input_format: NCHW
+      - type: PackVideoInputs
+
+engine:
+  max_epochs: 100
+  strategy: ddp
+  precision: fp32
+  device: cuda
+
+optim:
+  type: SGD
+  params:
+    lr: 0.001
+    momentum: 0.9
+    weight_decay: 0.0001
+
+schedule:
+  type: CosineAnnealing
+  params:
+    T_max: 100
+    eta_min: 0.00001
+  warmup_steps: 500
+  warmup_start_lr: 0.0
+
+eval:
+  eval_freq: 3000
+  metrics:
+    - type: Accuracy
+  save_best: Accuracy
+  save_final: true
+
+tracking:
+  log_freq: 50

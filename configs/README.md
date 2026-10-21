@@ -1,6 +1,6 @@
 # 配置索引
 
-> 状态：Active（随配置变更更新） | 最后更新：2026-10-20
+> 状态：Active（随配置变更更新） | 最后更新：2026-10-21
 
 ---
 
@@ -10,25 +10,37 @@
 configs/
 ├── README.md
 ├── _base_/
-│   └── default_runtime.yaml          # 所有配置的基础模板
+│   └── default_runtime.yaml          # 所有配置的基础模板（分类/检测）
 ├── models/                            # 模型规格定义
 │   ├── mlp.yaml
-│   ├── simple_cnn.yaml
-│   ├── resnet18.yaml .. resnet101.yaml
+│   ├── resnet18.yaml .. resnet50.yaml
 │   ├── vit_b16.yaml .. vit_l16.yaml
 │   ├── swin_tiny.yaml .. swin_base.yaml
-│   └── fcos_r50.yaml
 ├── datasets/                          # 数据集规格定义
-│   └── cassava.yaml
+│   ├── cassava.yaml
+│   ├── ade20k.yaml
+│   └── cityscapes.yaml
 ├── experiments/                       # 模型 + 数据集组合实验
-│   ├── cassava_mlp.yaml .. cassava_vit_b16.yaml
-│   └── herbs_swin_tiny.yaml
-├── classification/                    # 独立任务配置
+│   ├── cassava_*.yaml
+│   ├── ade20k_fcn_r50.yaml
+│   └── cityscapes_fcn_r50.yaml
+├── classification/                    # 独立分类任务配置
 │   └── resnet50_imagenet.yaml
-├── detection/
-│   └── fcos_resnet50_coco.yaml       # FCOS COCO 检测
-└── segmentation/
-    └── fcn_resnet50_ade20k.yaml      # FCN ADE20K 分割
+├── detection/                         # 检测任务配置
+│   ├── fcos_resnet50_coco.yaml
+│   └── _base_/                        # YOLO 基础配置（22 个变体）
+├── segmentation/                      # 分割任务配置
+│   └── fcn_resnet50_ade20k.yaml
+└── action_recognition/                # 动作识别配置（11 种模型）
+    ├── _base_/video_base.yaml
+    ├── tsn_resnet50_ucf101.yaml
+    ├── tsm_resnet50_ucf101.yaml
+    ├── mvitv2_small_ucf101.yaml
+    ├── r3d18_ucf101.yaml
+    ├── x3d_xs_ucf101.yaml
+    ├── xclip_vitb16_ucf101.yaml
+    ├── st_adapter_vitb16_ucf101.yaml
+    └── uniformerv2_ucf101.yaml
 ```
 
 配置采用**模型+数据集分离组合**模式：`experiments/cassava_resnet50.yaml` 通过 `_base_` 组合 `models/resnet50.yaml` + `datasets/cassava.yaml`，减少重复配置。

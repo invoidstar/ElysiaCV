@@ -1,6 +1,6 @@
 # Shared YOLO training base config — inherited by all YOLO variant configs.
 # Individual configs need only override:
-#   _base_: ["../_base_/yolo_base.yaml"]
+#   _base_: ["_base_/yolo_base.yaml"]
 #   model.variant: yolov11n    # or yolov10n, yolov12n, yolov26n, hdms_yolov11n, etc.
 #
 # Each variant can also override model.num_classes for custom datasets.

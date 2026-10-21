@@ -1,0 +1,1 @@
+"""MViTv2 / Hiera — multiscale vision transformer for video."""

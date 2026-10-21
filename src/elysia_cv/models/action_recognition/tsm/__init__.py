@@ -1,0 +1,1 @@
+"""TSM — Temporal Shift Module for action recognition."""

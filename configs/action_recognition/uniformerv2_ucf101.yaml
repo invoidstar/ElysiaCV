@@ -1,0 +1,69 @@
+# UniFormerV2: 3D CNN early stages + ViT late stages on UCF-101
+# Reference: CVPR 2023 — Video UniFormerV2
+_base_: ["_base_/video_base.yaml"]
+
+run:
+  name: uniformerv2_ucf101
+  output_dir: ./outputs/checkpoints/uniformerv2_ucf101
+
+model:
+  type: uniformerv2
+  image_size: 224
+  num_classes: 101
+  dropout: 0.5
+  cnn_channels: 64
+  vit_backbone: vit_small_patch16_224
+  pretrained: true
+
+data:
+  train:
+    transforms:
+      - type: DecordInit
+      - type: SampleFrames
+        num_frames: 8
+        sampling: random
+      - type: DecordDecode
+      - type: VideoResize
+        scale: 224
+        keep_ratio: false
+      - type: VideoRandomHorizontalFlip
+        prob: 0.5
+      - type: VideoNormalize
+        mean: [0.45, 0.45, 0.45]
+        std: [0.225, 0.225, 0.225]
+      - type: FormatShape
+        input_format: NCHW
+      - type: PackVideoInputs
+  val:
+    transforms:
+      - type: DecordInit
+      - type: SampleFrames
+        num_frames: 8
+        sampling: uniform
+      - type: DecordDecode
+      - type: VideoResize
+        scale: 224
+        keep_ratio: false
+      - type: VideoNormalize
+        mean: [0.45, 0.45, 0.45]
+        std: [0.225, 0.225, 0.225]
+      - type: FormatShape
+        input_format: NCHW
+      - type: PackVideoInputs
+
+engine:
+  max_epochs: 100
+
+optim:
+  type: SGD
+  params:
+    lr: 0.01
+    momentum: 0.9
+    weight_decay: 0.0005
+
+schedule:
+  type: CosineAnnealing
+  params:
+    T_max: 100
+  base_lr: 0.01
+  min_lr: 0.0001

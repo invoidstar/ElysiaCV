@@ -1,0 +1,69 @@
+# ST-Adapter: Frozen ViT-B/16 CLIP + 3D conv adapters on UCF-101
+# Reference: ICLR 2023 AIM paper — Adapting Image Models for Video
+_base_: ["_base_/video_base.yaml"]
+
+run:
+  name: stadapter_vitb16_ucf101
+  output_dir: ./outputs/checkpoints/stadapter_vitb16_ucf101
+
+model:
+  type: st_adapter
+  backbone: vit_base_patch16_clip_224
+  num_classes: 101
+  pretrained: true
+  dropout: 0.5
+  adapter_ratio: 4
+  freeze_backbone: true
+
+data:
+  train:
+    transforms:
+      - type: DecordInit
+      - type: SampleFrames
+        num_frames: 8
+        sampling: random
+      - type: DecordDecode
+      - type: VideoResize
+        scale: 224
+        keep_ratio: false
+      - type: VideoRandomHorizontalFlip
+        prob: 0.5
+      - type: VideoNormalize
+        mean: [0.48145466, 0.4578275, 0.40821073]
+        std: [0.26862954, 0.26130258, 0.27577711]
+      - type: FormatShape
+        input_format: NCHW
+      - type: PackVideoInputs
+  val:
+    transforms:
+      - type: DecordInit
+      - type: SampleFrames
+        num_frames: 8
+        sampling: uniform
+      - type: DecordDecode
+      - type: VideoResize
+        scale: 224
+        keep_ratio: false
+      - type: VideoNormalize
+        mean: [0.48145466, 0.4578275, 0.40821073]
+        std: [0.26862954, 0.26130258, 0.27577711]
+      - type: FormatShape
+        input_format: NCHW
+      - type: PackVideoInputs
+
+engine:
+  max_epochs: 50
+
+optim:
+  type: AdamW
+  params:
+    lr: 0.0001
+    weight_decay: 0.01
+
+schedule:
+  type: CosineAnnealing
+  params:
+    T_max: 50
+  base_lr: 0.0001
+  min_lr: 0.000001
+  warmup_steps: 500

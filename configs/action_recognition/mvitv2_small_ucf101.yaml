@@ -1,0 +1,14 @@
+# MViTv2-Small on UCF-101
+# Multiscale Vision Transformer as per-frame backbone with temporal pooling.
+_base_: ["_base_/video_base.yaml"]
+
+run:
+  name: mvitv2_small_ucf101
+  output_dir: ./outputs/checkpoints/mvitv2_small_ucf101
+
+model:
+  type: mvit
+  backbone: mvitv2_small
+  num_classes: 101
+  pretrained: true
+  dropout: 0.5

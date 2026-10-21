@@ -1,0 +1,62 @@
+# R3D-18 on UCF-101 (torchvision 3D ResNet-18)
+# 3D convolutions capture spatio-temporal features natively.
+_base_: ["_base_/video_base.yaml"]
+
+run:
+  name: r3d18_ucf101
+  output_dir: ./outputs/checkpoints/r3d18_ucf101
+
+model:
+  type: r3d
+  backbone: r3d_18
+  num_classes: 101
+  pretrained: true
+  dropout: 0.5
+
+data:
+  train:
+    transforms:
+      - type: DecordInit
+      - type: SampleFrames
+        num_frames: 16
+        sampling: random
+      - type: DecordDecode
+      - type: VideoResize
+        scale: 128
+      - type: VideoRandomCrop
+        size: 112
+      - type: VideoRandomHorizontalFlip
+        prob: 0.5
+      - type: VideoNormalize
+        mean: [0.45, 0.45, 0.45]
+        std: [0.225, 0.225, 0.225]
+      - type: FormatShape
+        input_format: NCTHW
+      - type: PackVideoInputs
+  val:
+    transforms:
+      - type: DecordInit
+      - type: SampleFrames
+        num_frames: 16
+        sampling: uniform
+      - type: DecordDecode
+      - type: VideoResize
+        scale: 128
+      - type: VideoCenterCrop
+        size: 112
+      - type: VideoNormalize
+        mean: [0.45, 0.45, 0.45]
+        std: [0.225, 0.225, 0.225]
+      - type: FormatShape
+        input_format: NCTHW
+      - type: PackVideoInputs
+
+engine:
+  max_epochs: 50
+
+optim:
+  type: SGD
+  params:
+    lr: 0.01
+    momentum: 0.9
+    weight_decay: 0.0005

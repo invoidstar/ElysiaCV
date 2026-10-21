@@ -52,9 +52,14 @@ class ModelSection:
     ``pretrained_path`` overrides / adds pre-trained weights.
     ``backbone``, ``neck``, ``head`` are optional overrides for shared components.
     ``kwargs`` is a passthrough dict forwarded to the model builder.
+    ``variant`` is the model variant name (e.g. "yolov11n").
+    ``num_classes`` overrides the default number of output classes.
     """
 
     type: str = ""
+    variant: str = ""
+    num_classes: int = 80
+    pretrained: bool = False
     pretrained_path: str | None = None
     backbone: dict[str, Any] = field(default_factory=dict)
     neck: dict[str, Any] = field(default_factory=dict)
@@ -62,13 +67,26 @@ class ModelSection:
     kwargs: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
+    def _safe_dict(cls, value: Any) -> dict[str, Any]:
+        """Coerce to dict, accepting both dicts and plain strings (TSN backbone)."""
+        if isinstance(value, Mapping):
+            return dict(value)
+        if isinstance(value, str) and value:
+            # Plain string backbone name → wrap as {"type": value}
+            return {"type": value}
+        return {}
+
+    @classmethod
     def from_mapping(cls, mapping: Mapping[str, Any]) -> "ModelSection":
         return cls(
             type=str(mapping.get("type", "")),
+            variant=str(mapping.get("variant", "")),
+            num_classes=int(mapping.get("num_classes", 80)),
+            pretrained=bool(mapping.get("pretrained", False)),
             pretrained_path=_optional_str(mapping.get("pretrained_path")),
-            backbone=dict(mapping.get("backbone") or {}),
-            neck=dict(mapping.get("neck") or {}),
-            head=dict(mapping.get("head") or {}),
+            backbone=cls._safe_dict(mapping.get("backbone")),
+            neck=cls._safe_dict(mapping.get("neck")),
+            head=cls._safe_dict(mapping.get("head")),
             kwargs=dict(mapping.get("kwargs") or {}),
         )
 
@@ -105,6 +123,8 @@ class _DataSubSection:
     dataset_name: str = ""
     dataset_root: str = ""
     split: str = ""
+    format: str = "kinetics"       # video dataset format
+    label_mode: str = "full"       # CropAndWeed label mode
     batch_size: int = 32
     num_workers: int = 2
     prefetch_factor: int = 2
@@ -121,12 +141,14 @@ class _DataSubSection:
             dataset_name=str(mapping.get("dataset_name", "")),
             dataset_root=str(mapping.get("dataset_root", "")),
             split=str(mapping.get("split", "")),
-            batch_size=int(loader.get("batch_size", 32)),
-            num_workers=int(loader.get("num_workers", 2)),
-            prefetch_factor=int(loader.get("prefetch_factor", 2)),
-            pin_memory=bool(loader.get("pin_memory", True)),
-            persistent_workers=bool(loader.get("persistent_workers", True)),
-            drop_last=bool(loader.get("drop_last", False)),
+            format=str(mapping.get("format", "kinetics")),
+            label_mode=str(mapping.get("label_mode", "full")),
+            batch_size=int(mapping.get("batch_size", loader.get("batch_size", 32))),
+            num_workers=int(mapping.get("num_workers", loader.get("num_workers", 2))),
+            prefetch_factor=int(mapping.get("prefetch_factor", loader.get("prefetch_factor", 2))),
+            pin_memory=bool(mapping.get("pin_memory", loader.get("pin_memory", True))),
+            persistent_workers=bool(mapping.get("persistent_workers", loader.get("persistent_workers", True))),
+            drop_last=bool(mapping.get("drop_last", loader.get("drop_last", False))),
             transforms=list(mapping.get("transforms") or []),
             batch_transforms=list(mapping.get("batch_transforms") or []),
         )
@@ -205,6 +227,9 @@ class _PrecisionSubSection:
 
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, Any]) -> "_PrecisionSubSection":
+        if isinstance(mapping, str):
+            # Simple string like "fp32" → mixed_precision=False
+            return cls(mixed_precision=(mapping != "fp32"), dtype="bfloat16")
         return cls(
             mixed_precision=bool(mapping.get("mixed_precision", True)),
             dtype=str(mapping.get("dtype", "bfloat16")),

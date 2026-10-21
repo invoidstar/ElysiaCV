@@ -149,9 +149,8 @@ class TrainerLoop:
     def _forward(self, batch: dict[str, Any]) -> dict[str, Any]:
         """Run one forward pass. Override in subclasses for custom logic.
 
-        Only known label keys (``gt_label``, ``gt_bboxes``, ``gt_semantic_seg``)
-        are unpacked as kwargs; metadata keys like ``img_path`` / ``image_id``
-        are silently dropped to avoid ``TypeError``.
+        YOLO / Video models use ``forward_train(batch)`` which takes the full
+        batch dict.  Other models follow the ``model(inputs, **labels)`` pattern.
         """
         _KNOWN_LABEL_KEYS = {"gt_label", "gt_label_soft", "gt_bboxes", "gt_semantic_seg", "gt_masks", "labels"}
 
@@ -159,6 +158,15 @@ class TrainerLoop:
 
         with autocast:
             if isinstance(batch, dict) and "inputs" in batch:
+                # YOLO / Video: batch dict consumed internally by forward_train
+                if getattr(self.model, "_is_yolo", False) or getattr(self.model, "_is_video", False):
+                    batch_on_device = {
+                        k: v.to(self.device, non_blocking=True) if hasattr(v, "to") else v
+                        for k, v in batch.items()
+                    }
+                    return self.model._forward_train_fn(self.model, batch_on_device)
+
+                # Standard: unpack inputs + label kwargs
                 inputs = batch["inputs"].to(self.device, non_blocking=True)
                 labels = {
                     k: v.to(self.device, non_blocking=True) if hasattr(v, "to") else v

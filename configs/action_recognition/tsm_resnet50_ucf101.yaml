@@ -1,0 +1,14 @@
+# TSM ResNet50 on UCF-101
+# TSM adds temporal shift to ResNet blocks for +3-5% over TSN at zero extra params.
+_base_: ["_base_/video_base.yaml"]
+
+run:
+  name: tsm_resnet50_ucf101
+  output_dir: ./outputs/checkpoints/tsm_resnet50_ucf101
+
+model:
+  type: tsm
+  backbone: resnet50
+  num_classes: 101
+  pretrained: true
+  dropout: 0.5

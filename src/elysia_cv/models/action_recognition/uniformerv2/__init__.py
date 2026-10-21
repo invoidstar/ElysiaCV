@@ -1,0 +1,1 @@
+"""UniFormerV2 — CNN+Transformer unified architecture (CVPR 2023)."""

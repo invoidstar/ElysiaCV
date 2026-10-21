@@ -1,0 +1,59 @@
+# X3D-XS on UCF-101 (CVPR 2020)
+# Lightweight 3D ConvNet — 4 frames, 160² spatial, 2.2× channel expansion.
+_base_: ["_base_/video_base.yaml"]
+
+run:
+  name: x3d_xs_ucf101
+  output_dir: ./outputs/checkpoints/x3d_xs_ucf101
+
+model:
+  type: x3d
+  variant: xs
+  num_classes: 101
+  dropout: 0.5
+
+data:
+  train:
+    transforms:
+      - type: DecordInit
+      - type: SampleFrames
+        num_frames: 4
+        sampling: random
+      - type: DecordDecode
+      - type: VideoResize
+        scale: 160
+        keep_ratio: false
+      - type: VideoRandomHorizontalFlip
+        prob: 0.5
+      - type: VideoNormalize
+        mean: [0.45, 0.45, 0.45]
+        std: [0.225, 0.225, 0.225]
+      - type: FormatShape
+        input_format: NCTHW
+      - type: PackVideoInputs
+  val:
+    transforms:
+      - type: DecordInit
+      - type: SampleFrames
+        num_frames: 4
+        sampling: uniform
+      - type: DecordDecode
+      - type: VideoResize
+        scale: 160
+        keep_ratio: false
+      - type: VideoNormalize
+        mean: [0.45, 0.45, 0.45]
+        std: [0.225, 0.225, 0.225]
+      - type: FormatShape
+        input_format: NCTHW
+      - type: PackVideoInputs
+
+engine:
+  max_epochs: 100
+
+optim:
+  type: SGD
+  params:
+    lr: 0.1
+    momentum: 0.9
+    weight_decay: 0.0005

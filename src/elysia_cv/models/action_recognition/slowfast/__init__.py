@@ -1,0 +1,1 @@
+"""SlowFast — dual-pathway 3D ConvNets for video (ICCV 2019)."""

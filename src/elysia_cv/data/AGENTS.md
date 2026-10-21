@@ -8,10 +8,13 @@
 
 | 文件 | 作用 |
 |------|------|
-| `cassava_dataset.py` | `CassavaDataset` — Cassava 病害数据集 |
 | `dataset.py` | 基础 dataset 抽象 |
 | `dataloader.py` | DataLoader 构建器 |
-| `transforms/` | 数据增强 pipeline（augmentation、normalization、formatting） |
+| `video_dataset.py` | VideoDataset — 动作识别（Kinetics/UCF-101/CSV） |
+| `det_dataset.py` | COCO/Cityscapes 检测数据集 |
+| `cassava_dataset.py` | CassavaDataset — Cassava 病害数据集 |
+| `imagefolder_dataset.py` | ImageFolder 通用分类数据集 |
+| `transforms.py` | 视频数据增强 pipeline（10 种 transform） |
 
 ---
 
@@ -26,8 +29,11 @@
 
 ## 当前状态
 
-⚠️ `data/` 模块文件已存在，但部分功能尚未完全接入 TrainerLoop。
-当前 CLI 训练直接使用 `CassavaDataset` + 手动构建 `DataLoader`。
+✅ `data/` 模块已完全接入 TrainerLoop，支持多种数据集格式：
+- 动作识别：Kinetics、UCF-101、JSON、CSV（通过 `VideoDataset`）
+- 检测：COCO（通过 `COCODataset`）
+- 分割：ADE20K、Cityscapes（通过 `ADE20KDataset`/`CityscapesDataset`）
+- 分类：ImageFolder、Cassava（通过 `ImageFolderDataset`/`CassavaDataset`）
 
 ---
 

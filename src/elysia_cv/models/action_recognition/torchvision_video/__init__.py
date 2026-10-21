@@ -1,0 +1,1 @@
+"""Torchvision 3D CNN video models — R3D / MC3 / R2Plus1D / S3D."""

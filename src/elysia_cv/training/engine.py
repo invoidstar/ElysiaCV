@@ -249,83 +249,13 @@ class TrainingEngine:
     def _build_model(self) -> torch.nn.Module:
         """Build model from config, or use injected function.
 
-        Priority: injected function > plugin system > detection > cassava > torchvision.
+        Priority: injected function > shared model_builder.
         """
         if self._build_model_fn is not None:
             return self._build_model_fn()
 
-        model_type = self.config.model.type
-
-        # 1. Detection models (fcos)
-        if model_type in ("fcos",):
-            from elysia_cv.models.detection.fcos.runtime import build_model
-            model_cfg: dict = {
-                "model": {
-                    "type": model_type,
-                    "backbone": dict(self.config.model.backbone),
-                }
-            }
-            neck = getattr(self.config.model, "neck", None)
-            if neck is not None:
-                model_cfg["model"]["neck"] = dict(neck)
-            head = getattr(self.config.model, "head", None)
-            if head is not None:
-                model_cfg["model"]["head"] = dict(head)
-            pretrained = getattr(self.config.model, "pretrained_path", None)
-            if pretrained:
-                model_cfg["model"]["pretrained_path"] = pretrained
-            return build_model(model_cfg)
-
-        # 2. Try plugin system (ModelRegistry)
-        try:
-            from elysia_cv.models.registry import get_model_registry
-            registry = get_model_registry()
-            plugin_entry = registry.get(model_type)
-            plugin = plugin_entry.plugin
-            build_target = plugin.get_model_build_target()
-            module_path, func_name = build_target.split(":")
-            import importlib
-            mod = importlib.import_module(module_path)
-            build_fn = getattr(mod, func_name)
-            model_cfg = {
-                "model": {
-                    "type": model_type,
-                    "backbone": dict(self.config.model.backbone),
-                }
-            }
-            neck = getattr(self.config.model, "neck", None)
-            if neck is not None:
-                model_cfg["model"]["neck"] = dict(neck)
-            head = getattr(self.config.model, "head", None)
-            if head is not None:
-                model_cfg["model"]["head"] = dict(head)
-            pretrained = getattr(self.config.model, "pretrained_path", None)
-            if pretrained:
-                model_cfg["model"]["pretrained_path"] = pretrained
-            return build_fn(model_cfg)
-        except (KeyError, Exception):
-            pass
-
-        # 3. Try legacy cassava runtime
-        try:
-            from elysia_cv.models.classification.cassava.runtime import build_model
-            model_cfg = {
-                "model": {
-                    "type": model_type,
-                    "backbone": dict(self.config.model.backbone),
-                    "head": dict(getattr(self.config.model, "head", {})),
-                }
-            }
-            return build_model(model_cfg)
-        except Exception:
-            pass
-
-        # 4. torchvision fallback
-        import torchvision
-        if hasattr(torchvision.models, model_type):
-            return getattr(torchvision.models, model_type)(pretrained=False)
-
-        raise ValueError(f"unknown model: {model_type!r}. Provide build_model_fn.")
+        from elysia_cv.model_builder import build_model_from_config
+        return build_model_from_config(self.config.model)
 
 
 def _build_loader_from_config(data_cfg: Any, full_config: Any = None) -> Any:
@@ -338,6 +268,11 @@ def _build_loader_from_config(data_cfg: Any, full_config: Any = None) -> Any:
     collate_fn = None
     dataset_name = getattr(data_cfg, "dataset_name", "")
     if dataset_name.upper() == "COCO":
+        from elysia_cv.models.detection.fcos.runtime import (
+            _collate_detection_batch,
+        )
+        collate_fn = _collate_detection_batch
+    elif dataset_name.upper() == "CROPANDWEED":
         from elysia_cv.models.detection.fcos.runtime import (
             _collate_detection_batch,
         )
@@ -366,6 +301,26 @@ def _build_dataset(data_cfg: Any) -> Any:
         return CocoDetectionDataset(
             root=str(data_cfg.dataset_root or ""),
             split=str(data_cfg.split),
+            transforms=transforms,
+        )
+
+    if dataset_name.upper() == "CROPANDWEED":
+        from elysia_cv.data import CropAndWeedDataset
+        label_mode = str(getattr(data_cfg, "label_mode", "full"))
+        return CropAndWeedDataset(
+            root=str(data_cfg.dataset_root or ""),
+            split=str(data_cfg.split),
+            transforms=transforms,
+            label_mode=label_mode,
+        )
+
+    if dataset_name.upper() == "VIDEO":
+        from elysia_cv.data import VideoDataset
+        video_format = str(getattr(data_cfg, "format", "kinetics"))
+        return VideoDataset(
+            root=str(data_cfg.dataset_root or ""),
+            split=str(data_cfg.split),
+            format=video_format,
             transforms=transforms,
         )
 

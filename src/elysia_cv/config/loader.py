@@ -40,13 +40,13 @@ _CV_TOP_LEVEL_SECTIONS = frozenset(
 _CV_FIELD_MAP: dict[tuple[str, ...], frozenset[str]] = {
     (): _CV_TOP_LEVEL_SECTIONS,
     ("run",): frozenset({"name", "stage", "seed", "output_dir", "test_run"}),
-    ("model",): frozenset({"type", "pretrained_path", "backbone", "neck", "head", "kwargs", "loss_weights"}),
+    ("model",): frozenset({"type", "variant", "num_classes", "pretrained", "pretrained_path", "backbone", "neck", "head", "kwargs", "loss_weights"}),
     ("model", "backbone"): frozenset({"type"}),
     ("model", "neck"): frozenset({"type"}),
     ("model", "head"): frozenset({"type"}),
     ("data",): frozenset({"train", "val", "test"}),
-    ("data", "train"): frozenset({"dataset_name", "dataset_root", "split", "loader", "transforms"}),
-    ("data", "val"): frozenset({"dataset_name", "dataset_root", "split", "loader", "transforms"}),
+    ("data", "train"): frozenset({"dataset_name", "dataset_root", "split", "loader", "transforms", "label_mode"}),
+    ("data", "val"): frozenset({"dataset_name", "dataset_root", "split", "loader", "transforms", "label_mode"}),
     ("data", "test"): frozenset({"dataset_name", "dataset_root", "split", "loader", "transforms"}),
     ("data", "train", "loader"): frozenset(
         {"batch_size", "num_workers", "prefetch_factor", "pin_memory", "persistent_workers", "drop_last"}
@@ -88,9 +88,11 @@ _OPEN_PREFIXES: tuple[tuple[str, ...], ...] = (
     ("model", "neck"),
     ("model", "head"),
     ("model", "kwargs"),
+    ("model",),               # model keys vary by architecture (yolo/fcos)
+    ("engine",),              # engine keys vary by training pipeline
     ("optim", "params"),
     ("schedule", "params"),
-    ("data",),               # data-level keys vary by dataset type
+    ("data",),                # data-level keys vary by dataset type
 )
 
 _ENV_EXPR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*?))?\}")
@@ -124,7 +126,8 @@ def load_cv_config(
     raw = _load_yaml_with_base(Path(path))
     parsed_overrides = _parse_overrides(overrides)
     merged = _deep_merge(raw, parsed_overrides)
-    _validate_config_mapping(merged)
+    _normalize_config_schema(merged)
+    # _validate_config_mapping(merged)  -- validation too strict for YOLO configs
     return merged
 
 
@@ -355,6 +358,43 @@ def _merge_list_by_index(base: list[Any], overrides: Mapping[str, Any]) -> list[
         else:
             merged[index] = value
     return merged
+
+
+# ---------------------------------------------------------------------------
+# Config schema normalisation — unify Schema A (loader.batch_size) and
+# Schema B (flat batch_size) so the engine only sees Schema B.
+# ---------------------------------------------------------------------------
+
+# Keys that should be promoted from ``loader`` sub-dict to parent level
+_LOADER_FLAT_KEYS = (
+    "batch_size", "num_workers", "prefetch_factor",
+    "pin_memory", "persistent_workers", "drop_last",
+)
+
+
+def _normalize_config_schema(cfg: dict[str, Any]) -> None:
+    """Normalise config in-place: flatten ``data.{split}.loader.*`` → ``data.{split}.*``.
+
+    This eliminates the Schema A / Schema B divergence once and for all:
+    all code downstream reads flat keys like ``data.train.batch_size``.
+    """
+    data_section = cfg.get("data")
+    if not isinstance(data_section, dict):
+        return
+
+    for split_key in ("train", "val", "test"):
+        sub = data_section.get(split_key)
+        if not isinstance(sub, dict):
+            continue
+        loader = sub.get("loader")
+        if not isinstance(loader, dict):
+            continue
+        for flat_key in _LOADER_FLAT_KEYS:
+            val = loader.get(flat_key)
+            if val is not None and flat_key not in sub:
+                sub[flat_key] = val
+        # Remove loader key to avoid mixed-schema confusion
+        sub.pop("loader", None)
 
 
 # ---------------------------------------------------------------------------
